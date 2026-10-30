@@ -111,7 +111,7 @@ once the EQ is on.
 | Use a preset on one output | Tick *Always use … on (device)* in the menu, or Settings › Devices |
 | Keep your changes | **Save** (⌘S), or **Save As…** for a new preset |
 
-Edits apply live. Like eqtune, Oomph keeps them as *unsaved changes* until you save or revert,
+Edits apply live. Like eqtune, Oomph keeps them as *unsaved changes* until you save or reset them,
 and marks edited presets with an orange dot.
 
 ## How it works
