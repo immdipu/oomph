@@ -29,7 +29,9 @@ private struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: Binding(get: { loginItem == .enabled }, set: setLaunchAtLogin)) {
+                // Closures, not method references: Swift 6.3 crashes converting a method to
+                // Binding's @isolated(any) setter.
+                Toggle(isOn: Binding(get: { loginItem == .enabled }, set: { setLaunchAtLogin($0) })) {
                     Text("Launch at login")
                     Text("Needed for presets to follow your output devices.")
                 }
@@ -116,17 +118,17 @@ private struct EngineSettings: View {
         Form {
             if let status = store.status {
                 Section("Sound") {
-                    Toggle(isOn: command(status.limiter, store.setLimiter)) {
+                    Toggle(isOn: command(status.limiter) { await store.setLimiter($0) }) {
                         Text("Limiter")
                         Text("Gently catches peaks that boosts push past full scale, so loud audio doesn’t crackle.")
                     }
                 }
                 Section("Battery") {
-                    Toggle(isOn: command(status.autoOffIdle, store.setAutoOffIdle)) {
+                    Toggle(isOn: command(status.autoOffIdle) { await store.setAutoOffIdle($0) }) {
                         Text("Pause when nothing is playing")
                         Text("The EQ resumes as soon as audio starts.")
                     }
-                    Toggle(isOn: command(status.autoOffLowPower, store.setAutoOffLowPower)) {
+                    Toggle(isOn: command(status.autoOffLowPower) { await store.setAutoOffLowPower($0) }) {
                         Text("Pause in Low Power Mode")
                         Text("Turning the EQ on yourself overrides this.")
                     }

@@ -26,8 +26,6 @@ jobs:
       # The build compiles the bundled eqtune engine from Vendor/eqtune.
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
-
       # No signing identity on CI; the build script skips signing the engine to match.
       - name: Test
         run: |
