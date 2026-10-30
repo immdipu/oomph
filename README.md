@@ -41,7 +41,9 @@ the menu bar and adds the tools that make an EQ useful to everyone.
 - **Hold to Compare.** Press and hold to hear your Mac without the EQ, let go to hear it
   again. Quick A/B switching is the surest way to tell whether a change actually sounds better.
 - **A preset for each output.** Tick *Always use this preset on AirPods* once, and Oomph
-  switches presets whenever macOS switches outputs.
+  switches presets whenever macOS switches outputs. In Settings › Devices, pick *No EQ* for
+  an output that should sound untouched (an audio interface, say), and one preset for every
+  other output.
 - **Find your headphones.** Search [AutoEq](https://autoeq.app)'s measured corrections for
   more than 8,000 headphones and earbuds, pick yours, and Oomph adds a preset that evens out
   their sound.
@@ -61,6 +63,9 @@ the menu bar and adds the tools that make an EQ useful to everyone.
 - **Equalizer APO and AutoEq files.** Import parametric EQ files from Equalizer APO or
   AutoEq; filters eqtune can't play are listed, never silently dropped.
 - **Undo and redo** (⌘Z / ⇧⌘Z) for every band and preamp change.
+- **Global shortcuts** of your choosing turn the EQ on or off and step to the next or
+  previous preset from any app, with a brief on-screen confirmation. No Accessibility
+  permission needed.
 - **Full preset management**: new, duplicate, rename, delete, export and import (TOML), and
   reset eqtune's own presets to their originals.
 - **Preamp with headroom readout** and *Auto* to fit the biggest boost.
@@ -121,6 +126,8 @@ once the EQ is on.
 | Change how wide a band is | Hover the graph with the band selected and scroll |
 | Correct your headphones | Equalizer › **+** › *Find Your Headphones…* |
 | Use a preset on one output | Tick *Always use … on (device)* in the menu, or Settings › Devices |
+| Keep the EQ off on one output | Settings › Devices › *No EQ* |
+| Switch from any app | Record shortcuts in Settings › Shortcuts |
 | Keep your changes | **Save** (⌘S), or **Save As…** for a new preset |
 
 Edits apply live. Like eqtune, Oomph keeps them as *unsaved changes* until you save or reset them,
@@ -219,7 +226,7 @@ eqtune. Uninstalling the engine (Settings › Engine) keeps them.
   engine starts. A command can then report "eqtune was busy"; the next refresh shows what happened.
 - **eqtune never clears `last error`.** Oomph shows a warning only while the EQ should be running
   and isn't (auto-off pauses don't count).
-- **Not yet:** global hotkeys, a spectrum analyzer, per-app EQ, Intel builds.
+- **Not yet:** a spectrum analyzer, per-app EQ, Intel builds.
 
 ## Contributing
 
