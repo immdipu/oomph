@@ -13,6 +13,12 @@ extension LinearGradient {
     static let oomph = LinearGradient(colors: [.oomphOrange, .oomphPink], startPoint: .leading, endPoint: .trailing)
 }
 
+extension Animation {
+    /// How things move when eqtune's answer changes the window: quick enough to follow,
+    /// slow enough to see what changed.
+    static let oomph = Animation.smooth(duration: 0.35)
+}
+
 /// One color per band, in frequency order, shared by the graph and the band list.
 enum BandColors {
     private static let palette: [Color] = [.orange, .pink, .purple, .blue, .cyan, .green, .yellow, .red, .indigo, .mint, .teal]
@@ -123,6 +129,48 @@ struct FailureBanner: View {
     }
 }
 
+/// A switch for a setting eqtune owns. It keeps the new position while eqtune applies it
+/// (about half a second) instead of flipping back until eqtune's answer arrives.
+struct EqtuneToggle<Label: View>: View {
+    let isOn: Bool
+    let change: @MainActor (Bool) async -> Void
+    @ViewBuilder let label: (_ isOn: Bool) -> Label
+    @State private var pending: Bool?
+    @State private var flips = 0
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { pending ?? isOn }, set: { on in
+            pending = on
+            flips += 1
+            let flip = flips
+            Task {
+                await change(on)
+                if flips == flip { pending = nil } // flipped again meanwhile: that one settles it
+            }
+        })) {
+            label(pending ?? isOn)
+        }
+    }
+}
+
+/// A small spinner while a command runs. Most commands finish before it shows, so it
+/// doesn't flash on every click, and it keeps its place so the controls beside it don't move.
+struct BusyIndicator: View {
+    let isBusy: Bool
+    @State private var shown = false
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .opacity(shown ? 1 : 0)
+            .accessibilityHidden(!shown)
+            .task(id: isBusy) {
+                if isBusy, (try? await Task.sleep(for: .milliseconds(600))) == nil { return }
+                withAnimation(.oomph) { shown = isBusy }
+            }
+    }
+}
+
 /// What the EQ is doing right now, as a colored dot and a few words.
 struct StatusLine: View {
     let status: EqtuneStatus
@@ -171,6 +219,7 @@ struct HoldToCompareButton: View {
             .padding(.horizontal, 10)
             .background(holding ? AnyShapeStyle(LinearGradient.oomph.opacity(0.35)) : AnyShapeStyle(.quaternary),
                         in: RoundedRectangle(cornerRadius: 6))
+            .animation(.smooth(duration: 0.15), value: holding)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in

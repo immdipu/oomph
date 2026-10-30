@@ -41,8 +41,10 @@ struct BandStrip: View {
                 .frame(width: 16, height: 9)
                 .accessibilityLabel(band.kind.label)
             Text(Format.hz(band.hz))
+                .contentTransition(.numericText())
             Text(Format.db(band.db))
                 .foregroundStyle(band.db == 0 ? .secondary : .primary)
+                .contentTransition(.numericText())
         }
         .font(.callout.monospacedDigit())
         .padding(.leading, 4)
@@ -171,6 +173,7 @@ struct OutputBar: View {
         .font(.callout)
         .padding(.horizontal)
         .padding(.vertical, 10)
+        .animation(.oomph, value: overload < 0.1)
         .onChange(of: preset.name) { draft = nil }
     }
 

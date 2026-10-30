@@ -118,17 +118,17 @@ private struct EngineSettings: View {
         Form {
             if let status = store.status {
                 Section("Sound") {
-                    Toggle(isOn: command(status.limiter) { await store.setLimiter($0) }) {
+                    EqtuneToggle(isOn: status.limiter, change: { await store.setLimiter($0) }) { _ in
                         Text("Limiter")
                         Text("Gently catches peaks that boosts push past full scale, so loud audio doesn’t crackle.")
                     }
                 }
                 Section("Battery") {
-                    Toggle(isOn: command(status.autoOffIdle) { await store.setAutoOffIdle($0) }) {
+                    EqtuneToggle(isOn: status.autoOffIdle, change: { await store.setAutoOffIdle($0) }) { _ in
                         Text("Pause when nothing is playing")
                         Text("The EQ resumes as soon as audio starts.")
                     }
-                    Toggle(isOn: command(status.autoOffLowPower) { await store.setAutoOffLowPower($0) }) {
+                    EqtuneToggle(isOn: status.autoOffLowPower, change: { await store.setAutoOffLowPower($0) }) { _ in
                         Text("Pause in Low Power Mode")
                         Text("Turning the EQ on yourself overrides this.")
                     }
@@ -180,11 +180,6 @@ private struct EngineSettings: View {
         } message: {
             Text("This stops eqtune and removes its background process. Your presets stay on disk, and you can reinstall from the Oomph menu.")
         }
-    }
-
-    /// A switch that shows eqtune's value and runs a command when flipped.
-    private func command(_ value: Bool, _ run: @escaping @MainActor (Bool) async -> Void) -> Binding<Bool> {
-        Binding(get: { value }, set: { on in Task { await run(on) } })
     }
 }
 

@@ -11,6 +11,7 @@ struct EqualizerView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 250, max: 320)
         } detail: {
             detail
+                .animation(.oomph, value: store.activePreset == nil)
         }
         .frame(minWidth: 940, minHeight: 640)
         .onAppear { store.setVisible(.editor, true) }
@@ -51,15 +52,27 @@ private struct PresetEditor: View {
     /// Unsent edits, keyed by the frequency eqtune knows each band by.
     @State private var drafts: [Double: Band] = [:]
     @State private var pending: [Double: Task<Void, Never>] = [:]
-    /// The selected band's frequency as eqtune has it.
-    @State private var selection: Double?
+    /// The selected band's frequency as eqtune has it, per preset: when another preset
+    /// arrives, the old selection can't pick out its band at the same frequency.
+    @State private var selections: [String: Double] = [:]
     /// The graph's ±dB scale: nil picks 12 or 24 to fit the curve.
     @State private var wideScale: Bool?
     @State private var nameRequest: NameRequest?
 
     private var shown: [Band] { preset.bands.map { drafts[$0.hz] ?? $0 } }
     private var sampleRate: Double { status.outputRateHz ?? 48_000 }
-    private var selectedIndex: Int? { preset.bands.firstIndex { $0.hz == selection } }
+    private var selection: Double? {
+        get { selections[preset.name] }
+        nonmutating set { selections[preset.name] = newValue }
+    }
+    /// The selected band's frequency as eqtune has it. A moved band's new frequency can
+    /// arrive from eqtune a moment before `selection` follows it; its draft bridges that.
+    private var selectedHz: Double? {
+        guard let selection else { return nil }
+        if preset.bands.contains(where: { $0.hz == selection }) { return selection }
+        return drafts[selection].flatMap { draft in preset.bands.first { $0.sitsAt(draft.hz) }?.hz }
+    }
+    private var selectedIndex: Int? { preset.bands.firstIndex { $0.hz == selectedHz } }
     private var range: Double {
         let needsWide = preset.bands.contains { abs($0.db) > 12 } || preset.bands.peakGainDB(sampleRate: sampleRate) > 12
         return (wideScale ?? needsWide) ? 24 : 12
@@ -85,7 +98,8 @@ private struct PresetEditor: View {
                     .padding([.horizontal, .top])
             }
             VStack(alignment: .leading, spacing: 8) {
-                EQGraph(bands: preset.bands, shown: shown, sampleRate: sampleRate, range: range, selection: $selection,
+                EQGraph(bands: preset.bands, shown: shown, sampleRate: sampleRate, range: range,
+                        selection: Binding(get: { selectedHz }, set: { selection = $0 }),
                         onEdit: edit, onAdd: add, onRemove: remove)
                     .frame(minHeight: 260)
                 HStack {
@@ -95,7 +109,9 @@ private struct PresetEditor: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                     Spacer(minLength: 12)
-                    Picker("Scale", selection: Binding(get: { range }, set: { wideScale = $0 == 24 })) {
+                    // Only a scale picked here animates: one that flips to fit eqtune's answer comes with
+                    // re-sorted bands, and points would slide across each other.
+                    Picker("Scale", selection: Binding(get: { range }, set: { scale in withAnimation(.oomph) { wideScale = scale == 24 } })) {
                         Text("±12 dB").tag(12.0)
                         Text("±24 dB").tag(24.0)
                     }
@@ -126,6 +142,12 @@ private struct PresetEditor: View {
             Divider()
             OutputBar(status: status, preset: preset, bands: shown)
         }
+        // Another preset morphs the curve and slides the points to their new places. Edits
+        // don't: a drag follows the pointer, and eqtune's answer to it matches what's shown.
+        .animation(.oomph, value: preset.name)
+        .animation(.oomph, value: selection)
+        .animation(.oomph, value: status.isOn)
+        .animation(.oomph, value: store.failure)
         .navigationTitle(displayName(preset.name))
         .navigationSubtitle(status.activeIsDirty ? "Edited" : "Saved")
         .toolbar { toolbar }
@@ -134,7 +156,7 @@ private struct PresetEditor: View {
             pending.values.forEach { $0.cancel() }
             pending = [:]
             drafts = [:]
-            selection = nil
+            selections = [:]
         }
     }
 
@@ -153,7 +175,6 @@ private struct PresetEditor: View {
             HoldToCompareButton().frame(width: 160)
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            if store.isBusy { ProgressView().controlSize(.small) }
             Menu("Revert") {
                 Button("Revert to Saved Version…") { Task { await Dialogs.revert(store: store) } }
                     .disabled(!status.activeIsDirty)
@@ -175,8 +196,8 @@ private struct PresetEditor: View {
             .disabled(store.isBusy)
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .help("Save this tuning as a new preset (⇧⌘S)")
-            Toggle(isOn: Binding(get: { status.isOn }, set: { on in Task { await toggle(on) } })) {
-                Label(status.isOn ? "EQ On" : "EQ Off", systemImage: "power")
+            EqtuneToggle(isOn: status.isOn, change: { await toggle($0) }) { on in
+                Label(on ? "EQ On" : "EQ Off", systemImage: "power")
             }
             .toggleStyle(.button)
             .disabled(store.isBusy)
@@ -192,7 +213,8 @@ private struct PresetEditor: View {
     // MARK: - Edits
 
     private func edit(_ original: Band, _ edited: Band, _ timing: EditTiming) {
-        drafts[original.hz] = edited
+        // A typed value or a new band type morphs; drags, scrolling and arrow keys follow at once.
+        withAnimation(timing == .now ? .oomph : nil) { drafts[original.hz] = edited }
         pending[original.hz]?.cancel()
         guard timing != .live else { return }
         let name = preset.name
@@ -201,10 +223,15 @@ private struct PresetEditor: View {
             guard !Task.isCancelled else { return }
             if edited != original { await store.editBand(original, of: name, to: edited) }
             guard drafts[original.hz] == edited else { return } // edited again meanwhile
-            drafts[original.hz] = nil
-            // A frequency change moves the band; keep it selected at its new frequency.
-            if selection == original.hz, let moved = store.activePreset?.bands.first(where: { $0.sitsAt(edited.hz) }) {
-                selection = moved.hz
+            // eqtune shows its answer by now. A band still at the old frequency but not as edited
+            // means eqtune refused the edit: it glides back. Otherwise this changes nothing.
+            let unmoved = store.activePreset?.bands.first { $0.sitsAt(original.hz) }
+            withAnimation(unmoved.map { $0 != edited } == true ? .oomph : nil) { drafts[original.hz] = nil }
+            // A frequency change moves the band; keep it selected at its new frequency. It's the
+            // same band, so nothing animates.
+            if unmoved == nil, selection == original.hz,
+               let moved = store.activePreset?.bands.first(where: { $0.sitsAt(edited.hz) }) {
+                withTransaction(\.disablesAnimations, true) { selection = moved.hz }
             }
         }
     }
