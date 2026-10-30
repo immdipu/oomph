@@ -129,8 +129,12 @@ struct EQCurveView: View {
             axes
             if let highlight {
                 let own = CurveLevels([highlight.band], sampleRate: sampleRate, range: range)
-                CurveShape(levels: own, filled: true).fill(highlight.color.opacity(0.18))
-                CurveShape(levels: own).stroke(highlight.color.opacity(0.8), lineWidth: 1)
+                // Fades in and out on its own, so selecting a band animates nothing else here.
+                Group {
+                    CurveShape(levels: own, filled: true).fill(highlight.color.opacity(0.18))
+                    CurveShape(levels: own).stroke(highlight.color.opacity(0.8), lineWidth: 1)
+                }
+                .transition(.opacity.animation(.oomph))
             }
             CurveShape(levels: levels, filled: true)
                 .fill(LinearGradient(colors: [.oomphOrange.opacity(0.22), .oomphPink.opacity(0.22)],
@@ -196,6 +200,8 @@ struct EQCurveView: View {
 /// The equalizer's graph: drag a point to move a band, scroll over the graph to change the
 /// selected band's width, double-click to add a band, arrow keys to nudge, Delete to remove.
 struct EQGraph: View {
+    /// The preset the bands belong to.
+    let preset: String
     /// The bands as eqtune has them; they identify each point.
     let bands: [Band]
     /// The same bands with unsent edits applied, in the same order.
@@ -203,23 +209,32 @@ struct EQGraph: View {
     let sampleRate: Double
     let range: Double
     @Binding var selection: Double?
+    /// Whether the graph has the keyboard, for the arrow keys. The editor gives it the
+    /// keyboard when a band is picked elsewhere too.
+    var focused: FocusState<Bool>.Binding
     let onEdit: (_ original: Band, _ edited: Band, EditTiming) -> Void
+    /// Changes a band by a step from wherever it is now, unsent edits included. Keys and the
+    /// scroll wheel can fire faster than the graph redraws, when `shown` is a step behind.
+    let onAdjust: (_ original: Band, _ change: (inout Band) -> Void) -> Void
     let onAdd: (Band) -> Void
     let onRemove: (Band) -> Void
 
     @State private var hover: CGPoint?
     @State private var wheel = ScrollWheel()
-    @FocusState private var focused: Bool
 
-    init(bands: [Band], shown: [Band], sampleRate: Double, range: Double, selection: Binding<Double?>,
-         onEdit: @escaping (Band, Band, EditTiming) -> Void, onAdd: @escaping (Band) -> Void,
-         onRemove: @escaping (Band) -> Void) {
+    init(preset: String, bands: [Band], shown: [Band], sampleRate: Double, range: Double, selection: Binding<Double?>,
+         focused: FocusState<Bool>.Binding,
+         onEdit: @escaping (Band, Band, EditTiming) -> Void, onAdjust: @escaping (Band, (inout Band) -> Void) -> Void,
+         onAdd: @escaping (Band) -> Void, onRemove: @escaping (Band) -> Void) {
+        self.preset = preset
         self.bands = bands
         self.shown = shown
         self.sampleRate = sampleRate
         self.range = range
         _selection = selection
+        self.focused = focused
         self.onEdit = onEdit
+        self.onAdjust = onAdjust
         self.onAdd = onAdd
         self.onRemove = onRemove
     }
@@ -234,10 +249,10 @@ struct EQGraph: View {
                             highlight: selectedIndex.map { (shown[$0], BandColors.color($0)) })
                 if let hover { readout(at: hover, scale: scale) }
                 ForEach(Array(bands.enumerated()), id: \.offset) { index, band in
-                    BandNode(index: index, original: band, shown: shown[index], scale: scale,
+                    BandNode(preset: preset, index: index, original: band, shown: shown[index], scale: scale,
                              isSelected: band.hz == selection,
-                             onSelect: { selection = band.hz; focused = true },
-                             onEdit: { onEdit(band, $0, $1) },
+                             onSelect: { selection = band.hz; focused.wrappedValue = true },
+                             onEdit: onEdit,
                              onRemove: { onRemove(band) })
                 }
             }
@@ -260,13 +275,17 @@ struct EQGraph: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
         .focusable()
         .focusEffectDisabled()
-        .focused($focused)
-        .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .delete, .deleteForward]) { press in
+        .focused(focused)
+        .onKeyPress(keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .delete, .deleteForward, Self.deleteKey]) { press in
             nudge(press.key, large: press.modifiers.contains(.shift)) ? .handled : .ignored
         }
         .onAppear { wheel.handler = scrollQ }
+        .onChange(of: bands) { wheel.handler = scrollQ }
         .onChange(of: shown) { wheel.handler = scrollQ }
-        .onChange(of: selection) { wheel.handler = scrollQ }
+        .onChange(of: selection) {
+            wheel.handler = scrollQ
+            wheel.q = nil
+        }
         .onDisappear { wheel.stop() }
     }
 
@@ -276,13 +295,15 @@ struct EQGraph: View {
         return ZStack(alignment: .topLeading) {
             Path { $0.addLines([CGPoint(x: point.x, y: 0), CGPoint(x: point.x, y: scale.size.height)]) }
                 .stroke(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-            Text("\(Format.hz(hz)) · \(FrequencyZone.at(hz).name) · \(Format.db(gain))")
+            // As wide as the widest reading, so it doesn't resize as the pointer moves.
+            Text("00.00 kHz · Upper mids · +00.0 dB").hidden()
+                .overlay { Text("\(Format.hz(hz)) · \(FrequencyZone.at(hz).name) · \(Format.db(gain))") }
                 .font(.caption.monospacedDigit())
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
                 .background(.regularMaterial, in: Capsule())
                 .fixedSize()
-                .position(x: min(max(point.x, 80), scale.size.width - 80), y: 32)
+                .position(x: min(max(point.x, 96), scale.size.width - 96), y: 32) // half its width, and a margin
         }
         .allowsHitTesting(false)
     }
@@ -294,47 +315,61 @@ struct EQGraph: View {
         onAdd(Band(kind: .peaking, hz: free, db: (scale.db(point.y) * 2).rounded() / 2, q: 1))
     }
 
+    /// What the Delete key types on a Mac (U+007F). SwiftUI's `.delete` is U+0008, which it
+    /// doesn't send.
+    private static let deleteKey = KeyEquivalent("\u{7F}")
+
     /// Up/down: 0.5 dB (3 with Shift). Left/right: 1/12 octave (half an octave with Shift).
     private func nudge(_ key: KeyEquivalent, large: Bool) -> Bool {
         guard let index = selectedIndex else { return false }
         let band = bands[index]
-        var edited = shown[index]
         switch key {
-        case .delete, .deleteForward:
+        case .delete, .deleteForward, Self.deleteKey:
             onRemove(band)
-            return true
         case .upArrow, .downArrow:
-            edited.db = (edited.db + (key == .upArrow ? 1 : -1) * (large ? 3 : 0.5)).clamped(to: Limits.db)
+            let step = (key == .upArrow ? 1 : -1) * (large ? 3 : 0.5)
+            onAdjust(band) { $0.db = ($0.db + step).clamped(to: Limits.db) }
         default:
             let factor = pow(2, (key == .rightArrow ? 1 : -1) * (large ? 0.5 : 1.0 / 12))
-            let hz = (edited.hz * factor).clamped(to: Limits.hz)
-            edited.hz = hz < 1000 ? hz.rounded() : (hz / 10).rounded() * 10
+            onAdjust(band) { band in
+                let hz = (band.hz * factor).clamped(to: Limits.hz)
+                band.hz = hz < 1000 ? hz.rounded() : (hz / 10).rounded() * 10
+            }
         }
-        onEdit(band, edited, .soon)
         return true
     }
 
-    /// Scrolling up narrows the selected band (higher Q), scrolling down widens it.
+    /// Scrolling up narrows the selected band (higher Q), scrolling down widens it. Q counts on
+    /// unrounded: slow scrolling moves a wide band's Q by less than 0.01 per step.
     private func scrollQ(_ delta: CGFloat) -> Bool {
         guard let index = selectedIndex else { return false }
-        var edited = shown[index]
-        edited.q = ((edited.q * exp(Double(delta) * 0.02)).clamped(to: Limits.q) * 100).rounded() / 100
-        onEdit(bands[index], edited, .soon)
+        onAdjust(bands[index]) { band in
+            let start = wheel.q.flatMap { ($0 * 100).rounded() / 100 == band.q ? $0 : nil } ?? band.q
+            let q = (start * exp(Double(delta) * 0.02)).clamped(to: Limits.q)
+            wheel.q = q
+            band.q = (q * 100).rounded() / 100
+        }
         return true
     }
 }
 
 /// One draggable point on the graph, numbered and colored like its band.
 private struct BandNode: View {
+    let preset: String
     let index: Int
     let original: Band
     let shown: Band
     let scale: GraphScale
     let isSelected: Bool
     let onSelect: () -> Void
-    let onEdit: (Band, EditTiming) -> Void
+    let onEdit: (_ original: Band, _ edited: Band, EditTiming) -> Void
     let onRemove: () -> Void
     @State private var hovering = false
+    /// The drag under way: where it began, on which preset, its band as eqtune had it and as
+    /// drawn then, and where it has got to. It carries on from an edit eqtune hasn't answered
+    /// yet, stays with its band when an answer re-sorts the points under it, and ends quietly
+    /// if another preset arrives under it.
+    @State private var drag: (start: CGPoint, preset: String, original: Band, shown: Band, last: Band)?
 
     var body: some View {
         let size: CGFloat = isSelected ? 20 : 16
@@ -345,22 +380,31 @@ private struct BandNode: View {
             .background(BandColors.color(index), in: Circle())
             .overlay(Circle().strokeBorder(.white, lineWidth: isSelected ? 2 : 1))
             .shadow(color: .black.opacity(0.3), radius: isSelected ? 3 : 1)
+            .animation(.snappy(duration: 0.2), value: isSelected) // before .position: the point never lags
             .scaleEffect(hovering ? 1.15 : 1)
             .animation(.easeOut(duration: 0.12), value: hovering)
             .contentShape(Circle().inset(by: -6))
             .onHover { hovering = $0 }
-            .gesture(DragGesture(minimumDistance: 0)
+            // Measured in the window: the point moves with the drag, and in its own coordinates
+            // each move would shift the next reading, so it lagged and jumped back and forth.
+            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
                 .onChanged { value in
-                    if !isSelected { onSelect() }
-                    onEdit(dragged(by: value.translation), .live)
+                    if drag?.start != value.startLocation {
+                        drag = (value.startLocation, preset, original, shown, shown)
+                        if !isSelected { onSelect() }
+                    }
+                    edit(value, .live)
                 }
-                .onEnded { value in onEdit(dragged(by: value.translation), .now) })
+                .onEnded { value in
+                    edit(value, .now)
+                    drag = nil
+                })
             .contextMenu {
                 ForEach(BandKind.allCases, id: \.self) { kind in
                     Toggle(kind.label, isOn: Binding(get: { shown.kind == kind }, set: { _ in
                         var edited = shown
                         edited.kind = kind
-                        onEdit(edited, .now)
+                        onEdit(original, edited, .now)
                     }))
                 }
                 Divider()
@@ -373,22 +417,28 @@ private struct BandNode: View {
             .accessibilityAdjustableAction { direction in
                 var edited = shown
                 edited.db = (edited.db + (direction == .increment ? 0.5 : -0.5)).clamped(to: Limits.db)
-                onEdit(edited, .soon)
+                onEdit(original, edited, .soon)
             }
+            // Removed mid-drag (eqtune's answer to removing a band before it): no onEnded comes,
+            // so send where the drag got to.
+            .onDisappear { if let drag, drag.preset == preset { onEdit(drag.original, drag.last, .now) } }
             .position(x: scale.x(shown.hz), y: scale.nodeY(shown))
     }
 
-    /// The band moved by a drag from where it started. Holding Shift changes only the gain.
-    private func dragged(by translation: CGSize) -> Band {
-        var band = original
-        if abs(translation.width) >= 1, !NSEvent.modifierFlags.contains(.shift) {
-            let hz = scale.hz(scale.x(original.hz) + translation.width).clamped(to: Limits.hz)
+    /// The band moved by the drag from where it began. Holding Shift changes only the gain.
+    private func edit(_ value: DragGesture.Value, _ timing: EditTiming) {
+        if let drag, drag.preset != preset { return } // its band went with the old preset
+        let (original, start) = drag.map { ($0.original, $0.shown) } ?? (original, shown)
+        var band = start
+        if abs(value.translation.width) >= 1, !NSEvent.modifierFlags.contains(.shift) {
+            let hz = scale.hz(scale.x(start.hz) + value.translation.width).clamped(to: Limits.hz)
             band.hz = hz < 1000 ? hz.rounded() : (hz / 10).rounded() * 10
         }
-        if abs(translation.height) >= 1 {
-            band.db = scale.gain(forNodeAt: scale.nodeY(original) + translation.height, kind: original.kind)
+        if abs(value.translation.height) >= 1 {
+            band.db = scale.gain(forNodeAt: scale.nodeY(start) + value.translation.height, kind: start.kind)
         }
-        return band
+        drag?.last = band
+        onEdit(original, band, timing)
     }
 }
 
@@ -397,6 +447,8 @@ private struct BandNode: View {
 @MainActor
 private final class ScrollWheel {
     var handler: ((CGFloat) -> Bool)?
+    /// The selected band's Q as scrolled, before rounding.
+    var q: Double?
     private var monitor: Any?
 
     func start() {
@@ -411,5 +463,6 @@ private final class ScrollWheel {
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        q = nil
     }
 }

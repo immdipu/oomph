@@ -40,11 +40,16 @@ struct BandStrip: View {
                 .stroke(.secondary, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                 .frame(width: 16, height: 9)
                 .accessibilityLabel(band.kind.label)
-            Text(Format.hz(band.hz))
-                .contentTransition(.numericText())
-            Text(Format.db(band.db))
-                .foregroundStyle(band.db == 0 ? .secondary : .primary)
-                .contentTransition(.numericText())
+            // Each value in a slot as wide as its widest, so a chip keeps its width while the
+            // value changes and the chips after it stay put.
+            Text("00.00 kHz").hidden()
+                .overlay(alignment: .leading) { Text(Format.hz(band.hz)).contentTransition(.numericText()) }
+            Text("+00.0 dB").hidden()
+                .overlay(alignment: .trailing) {
+                    Text(Format.db(band.db))
+                        .foregroundStyle(band.db == 0 ? .secondary : .primary)
+                        .contentTransition(.numericText())
+                }
         }
         .font(.callout.monospacedDigit())
         .padding(.leading, 4)
@@ -86,7 +91,8 @@ struct BandInspector: View {
                 Text(FrequencyZone.describe(band))
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    // Two lines whether it needs one or two, so Remove Band stays put while dragging.
+                    .lineLimit(2, reservesSpace: true)
                 Button("Remove Band", systemImage: "trash", role: .destructive, action: onRemove)
                     .buttonStyle(.borderless)
             }
@@ -96,14 +102,15 @@ struct BandInspector: View {
                 GridRow {
                     Text("Frequency")
                     ValueSlider(title: "Frequency", value: band.hz, range: Limits.hz, logarithmic: true,
+                                snap: { $0 < 1000 ? $0.rounded() : ($0 / 10).rounded() * 10 },
                                 format: .number.grouping(.never).precision(.fractionLength(0...1)), unit: "Hz") { value, phase in
                         // Frequency is the band's identity in eqtune, so it moves on release.
-                        change(\.hz, value < 1000 ? value.rounded() : (value / 10).rounded() * 10, phase == .live ? .live : .now)
+                        change(\.hz, value, phase == .live ? .live : .now)
                     }
                 }
                 GridRow {
                     Text("Gain")
-                    ValueSlider(title: "Gain", value: band.db, range: Limits.db, step: 0.1,
+                    ValueSlider(title: "Gain", value: band.db, range: Limits.db, snap: { ($0 * 10).rounded() / 10 },
                                 format: .number.precision(.fractionLength(1)), unit: "dB") { value, phase in
                         change(\.db, value, phase == .live ? .live : .now)
                     }
@@ -111,9 +118,9 @@ struct BandInspector: View {
                 GridRow {
                     Text(band.kind == .peaking ? "Width (Q)" : "Slope (Q)")
                         .help(band.kind == .peaking ? "Lower values affect a wider range of frequencies" : "Higher values make a steeper corner")
-                    ValueSlider(title: "Q", value: band.q, range: Limits.q, logarithmic: true,
+                    ValueSlider(title: "Q", value: band.q, range: Limits.q, logarithmic: true, snap: { ($0 * 100).rounded() / 100 },
                                 format: .number.precision(.fractionLength(2)), unit: "") { value, phase in
-                        change(\.q, (value * 100).rounded() / 100, phase == .live ? .live : .now)
+                        change(\.q, value, phase == .live ? .live : .now)
                     }
                 }
             }
@@ -150,40 +157,48 @@ struct OutputBar: View {
         HStack(spacing: 12) {
             Text("Preamp")
                 .help("Overall level after the EQ. Lower it to make room for boosts.")
-            ValueSlider(title: "Preamp", value: preamp, range: -24...12, step: 0.1,
+            ValueSlider(title: "Preamp", value: preamp, range: -24...12, limits: Limits.preamp, snap: { ($0 * 10).rounded() / 10 },
                         format: .number.precision(.fractionLength(1)), unit: "dB") { value, phase in
                 draft = value
                 commit(value, now: phase == .final)
             }
             .frame(maxWidth: 380)
-            Button("Auto") { Task { await store.autoPreamp() } }
-                .disabled(store.isBusy)
+            Button("Auto") { Task { await store.autoPreamp(of: preset.name) } }
                 .help("Set the preamp so the biggest boost can’t push loud audio past full scale")
             Spacer()
-            if overload < 0.1 {
-                Label("Headroom OK", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .help("Your boosts fit: loud audio won’t distort.")
-            } else {
-                Label("Loud parts may distort (\(Format.db(overload)))", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .help("Your boosts can push loud audio \(Format.db(overload)) past full scale\(status.limiter ? "; the limiter softens it, but it can still sound strained" : ""). Click Auto to make room.")
-            }
+            // As wide as the reading at its widest, so the slider and Auto never move with it.
+            Label("Loud parts may distort (+00.0 dB)", systemImage: "exclamationmark.triangle.fill").hidden()
+                .overlay(alignment: .trailing) {
+                    if overload < 0.1 {
+                        Label("Headroom OK", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .help("Your boosts fit: loud audio won’t distort.")
+                    } else {
+                        Label("Loud parts may distort (\(Format.db(overload)))", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .help("Your boosts can push loud audio \(Format.db(overload)) past full scale\(status.limiter ? "; the limiter softens it, but it can still sound strained" : ""). Click Auto to make room.")
+                    }
+                }
         }
-        .font(.callout)
+        .font(.callout.monospacedDigit())
         .padding(.horizontal)
         .padding(.vertical, 10)
         .animation(.oomph, value: overload < 0.1)
-        .onChange(of: preset.name) { draft = nil }
+        .onChange(of: preset.name) {
+            pending?.cancel()
+            draft = nil
+        }
     }
 
-    /// Sends the preamp on release, or after a pause while dragging or typing.
+    /// Sends the preamp on release, or after a pause while dragging or typing. A release always
+    /// sends: eqtune may not have answered the pause yet, so its value can't tell what's new.
     private func commit(_ value: Double, now: Bool) {
         pending?.cancel()
+        let name = preset.name
         pending = Task {
             if !now { try? await Task.sleep(for: .milliseconds(400)) }
             guard !Task.isCancelled else { return }
-            if value != preset.preampDB { await store.setPreamp(value) }
+            if now || value != store.activePreset?.preampDB { await store.setPreamp(value, of: name) }
             if draft == value { draft = nil }
         }
     }

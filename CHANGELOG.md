@@ -52,6 +52,28 @@ All notable changes to Oomph are documented here. The format follows
 - The EQ switch in the menu bar and the equalizer, and the switches in Settings › Engine, no
   longer flip back for a moment while eqtune applies the change.
 - Clicking a Sound Library preset twice no longer tries to add it twice.
+- A dragged point stays under the pointer, and grabbing it again before eqtune has answered
+  carries on from where it is instead of snapping back.
+- The Gain, Width and Preamp sliders keep the value they're let go at, and typed values are
+  sent as typed: on Return, on Tab or when clicking away.
+- Changes in quick succession all arrive, in order: arrow keys at any pace, a step back, a
+  typed gain right after a typed frequency, Delete while a band is still moving. The band
+  stays selected throughout.
+- The Delete key removes the selected band.
+- Band chips, the graph's readout and the headroom reading keep their width as values change,
+  so nothing beside them shifts; the menu's distortion warning sits on its curve instead of
+  resizing the menu, and the menu opens on the real curve rather than a flat one.
+- Toolbar and menu controls no longer blink after every edit, and ⌘S works right after a band
+  is dragged, nudged or typed, sending a value still being typed first.
+- The automatic ±12/±24 dB scale only widens while a preset is open, so the graph no longer
+  flips back and forth after a release, and deep cuts now count.
+- Saving, Undo and Redo, the preamp, Auto, Bass and Treble, and adding a band no longer act on
+  another preset when a switch to it is under way.
+- An error shows in the line under the graph instead of resizing it, and stays put on a retry.
+  One slow answer from eqtune no longer blanks the window.
+- Hold to Compare switches faster, Reset on a Sound Library preset that isn't in use goes back
+  to the preset in use when it's done, a new preset can't take a Sound Library preset's name, and
+  Launch at Login updates on returning from System Settings.
 
 ## [1.0] - 2026-10-29
 

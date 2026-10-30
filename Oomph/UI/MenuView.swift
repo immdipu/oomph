@@ -10,6 +10,9 @@ struct MenuView: View {
     @Environment(\.dismiss) private var dismiss
     /// Tone slider positions not yet sent to eqtune, so the curve follows a drag.
     @State private var toneDrafts: [Tone: Double] = [:]
+    /// Counts each tone's sends. Only the latest may clear the draft when eqtune answers: an
+    /// earlier one, or one for a preset since switched away from, would wipe a newer value.
+    @State private var toneSends: [Tone: Int] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -44,6 +47,11 @@ struct MenuView: View {
             .padding(6)
         }
         .frame(width: 320)
+        // A draft belongs to the preset it was dragged on.
+        .onChange(of: store.status?.preset) {
+            toneDrafts = [:]
+            toneSends = toneSends.mapValues { $0 + 1 }
+        }
         .onAppear { store.setVisible(.menu, true) }
         .onDisappear { store.setVisible(.menu, false) }
     }
@@ -70,7 +78,6 @@ struct MenuView: View {
                 EqtuneToggle(isOn: status.isOn, change: { await toggle($0) }) { _ in Text("Equalizer") }
                     .toggleStyle(.switch)
                     .labelsHidden()
-                    .disabled(store.isBusy)
                     .help(status.isOn ? "Turn the EQ off" : "Turn the EQ on")
             }
             if store.isFailing {
@@ -90,6 +97,7 @@ struct MenuView: View {
     @ViewBuilder private func tuning(_ status: EqtuneStatus) -> some View {
         let preset = store.activePreset.flatMap { $0.name == status.preset ? $0 : nil }
         let shown = preset.map(withToneDrafts)
+        let over = shown?.overloadDB(sampleRate: status.outputRateHz ?? 48_000) ?? 0
         VStack(spacing: 10) {
             EQCurveView(bands: shown?.bands ?? [], sampleRate: status.outputRateHz ?? 48_000)
                 .frame(height: 64)
@@ -98,20 +106,31 @@ struct MenuView: View {
                 .opacity(status.isOn && !status.bypass ? 1 : 0.45)
                 .overlay { if preset == nil { ProgressView().controlSize(.small) } }
                 .animation(.oomph, value: preset?.bands)
+                // On the curve rather than below it, so the popover doesn't grow and shrink each
+                // time a Bass or Treble drag crosses the line.
+                .overlay(alignment: .bottomTrailing) {
+                    ZStack {
+                        if over >= 0.5 {
+                            HStack(spacing: 6) {
+                                Label("Loud parts may distort", systemImage: "exclamationmark.triangle.fill")
+                                    .foregroundStyle(.orange)
+                                Button("Fix") { Task { await store.autoPreamp(of: status.preset) } }
+                                    .controlSize(.small)
+                                    .help("Lower the preamp by \(Format.db(over).dropFirst()) so the biggest boost fits")
+                            }
+                            .font(.caption)
+                            .padding(.leading, 8)
+                            .padding(.trailing, 3)
+                            .padding(.vertical, 3)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(6)
+                            .transition(.opacity)
+                        }
+                    }
+                    .animation(.oomph, value: over >= 0.5)
+                }
             ForEach(Tone.allCases, id: \.self) { tone in
                 toneSlider(tone, preset: preset)
-            }
-            if let shown, case let over = shown.overloadDB(sampleRate: status.outputRateHz ?? 48_000), over >= 0.5 {
-                HStack {
-                    Label("Loud parts may distort", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
-                    Spacer()
-                    Button("Fix") { Task { await store.autoPreamp() } }
-                        .controlSize(.small)
-                        .disabled(store.isBusy)
-                        .help("Lower the preamp by \(Format.db(over).dropFirst()) so the biggest boost fits")
-                }
-                .font(.caption)
             }
         }
         .padding(12)
@@ -123,15 +142,20 @@ struct MenuView: View {
             Text(tone.name)
                 .frame(width: 46, alignment: .leading)
             Slider(value: Binding(get: { value }, set: { toneDrafts[tone] = ($0 * 2).rounded() / 2 }), in: Tone.range) { editing in
-                guard !editing, let db = toneDrafts[tone] else { return }
+                // The store, not `preset`: SwiftUI calls this closure as it was when the drag began.
+                // Letting go where it already is sends nothing: setTone checks on eqtune's answer.
+                guard !editing, let db = toneDrafts[tone], let name = store.status?.preset else { return }
+                toneSends[tone, default: 0] += 1
+                let send = toneSends[tone]
                 Task {
-                    await store.setTone(tone, to: db)
-                    if toneDrafts[tone] == db { toneDrafts[tone] = nil }
+                    await store.setTone(tone, to: db, of: name)
+                    // A drag under way, a later release or a preset switch owns the draft otherwise.
+                    if toneSends[tone] == send, toneDrafts[tone] == db { toneDrafts[tone] = nil }
                 }
             }
             .disabled(preset == nil)
             .accessibilityValue(Format.db(value))
-            Text(Format.db(value))
+            Text(preset == nil && toneDrafts[tone] == nil ? "–" : Format.db(value)) // still reading it
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .trailing)
@@ -158,17 +182,17 @@ struct MenuView: View {
                 .menuStyle(.borderlessButton)
                 .controlSize(.small)
                 .fixedSize()
-                .disabled(store.isBusy)
             }
             .padding(.horizontal, 6)
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(store.presets, id: \.self) { name in
                         MenuRow {
-                            Task { await store.selectPreset(name) }
+                            store.pick(name)
                         } label: {
+                            // At once, while eqtune switches.
                             Image(systemName: "checkmark")
-                                .opacity(name == status.preset ? 1 : 0)
+                                .opacity(name == (store.picked ?? status.preset) ? 1 : 0)
                                 .font(.caption.weight(.bold))
                             Text(displayName(name))
                             if status.dirtyPresets.contains(name) {
@@ -176,7 +200,6 @@ struct MenuView: View {
                                     .help("Unsaved changes")
                             }
                         }
-                        .disabled(store.isBusy)
                     }
                 }
             }
@@ -189,13 +212,11 @@ struct MenuView: View {
                     Spacer()
                     Button("Reset") { Task { await Dialogs.reset(status.preset, store: store) } }
                         .controlSize(.small)
-                        .disabled(store.isBusy)
                         .help(Dialogs.hasOriginal(status.preset)
                               ? "Put “\(displayName(status.preset))” back to its original tuning"
                               : "Put “\(displayName(status.preset))” back to how it was last saved")
-                    Button("Save") { Task { await store.savePreset(as: status.preset) } }
+                    Button("Save") { Task { await store.savePreset(status.preset) } }
                         .controlSize(.small)
-                        .disabled(store.isBusy)
                 }
                 .font(.caption)
                 .padding(.horizontal, 6)
@@ -204,7 +225,7 @@ struct MenuView: View {
                 Toggle(isOn: Binding(get: { store.devicePresets[device.id] == status.preset },
                                      set: { store.setDevicePreset($0 ? status.preset : nil, for: device.id) })) {
                     Text("Always use “\(displayName(status.preset))” on \(device.name)")
-                        .lineLimit(2)
+                        .lineLimit(2, reservesSpace: true) // so the rows below don't move with the name
                 }
                 .toggleStyle(.checkbox)
                 .font(.caption)
