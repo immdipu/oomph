@@ -164,6 +164,9 @@ struct EqtuneToggle<Label: View>: View {
         })) {
             label(pending ?? isOn)
         }
+        // Not again until eqtune has applied this flip: turning the EQ off can end in a
+        // save-or-discard question, which a flip back on meanwhile would make wrong.
+        .disabled(pending != nil)
     }
 }
 
@@ -179,7 +182,8 @@ struct BusyIndicator: View {
             .opacity(shown ? 1 : 0)
             .accessibilityHidden(!shown)
             .task(id: isBusy) {
-                if isBusy, (try? await Task.sleep(for: .milliseconds(600))) == nil { return }
+                // Past what an edit takes, a band move included (about 0.65 s).
+                if isBusy, (try? await Task.sleep(for: .milliseconds(1000))) == nil { return }
                 withAnimation(.oomph) { shown = isBusy }
             }
     }
@@ -309,6 +313,7 @@ struct MenuRow<Label: View>: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .onDisappear { hovering = false } // closed under the pointer: no hover end comes
     }
 }
 
@@ -318,37 +323,90 @@ extension MenuRow where Label == Text {
     }
 }
 
+/// Some `ValueSlider` field holds typed text it hasn't sent yet: there's something to save.
+struct UnsentTypingKey: PreferenceKey {
+    static let defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) { value = value || nextValue() }
+}
+
 /// A slider with a typed-in value next to it. The slider reports `live` changes while
-/// dragging and `final` on release; the field is final when the user presses Return.
+/// dragging and `final` on release; the field is final on Return or when it loses focus.
 struct ValueSlider: View {
     enum Change { case live, final }
 
     let title: String
     let value: Double
     let range: ClosedRange<Double>
+    /// What can be typed, when that's more than the slider reaches.
+    var limits: ClosedRange<Double>?
     var logarithmic = false
-    var step: Double = 0
+    /// Rounds where the slider is dragged to. Typed values are taken as typed.
+    var snap: (Double) -> Double = { $0 }
     let format: FloatingPointFormatStyle<Double>
     var unit: String = ""
     let onChange: (Double, Change) -> Void
+    /// Where the slider is being dragged to.
+    @State private var dragged: Double?
+    /// Counts releases. The release handler SwiftUI calls is the one from when the drag began,
+    /// with that moment's `value` and `onChange`; `onChange(of:)` runs the current ones.
+    @State private var releases = 0
+    /// A drag is under way. Changes without one come from the keyboard or VoiceOver.
+    @State private var editing = false
+    /// The field's text while it has focus: only what's typed, never rewritten from outside,
+    /// so a half-typed number survives (sending each keystroke turned 6.5 into 6.05).
+    @State private var typed: String?
+    /// The field's text when focus arrived, or what it last sent.
+    @State private var sent: String?
+    @FocusState private var typing: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            Slider(value: Binding(get: { position(value) }, set: { onChange(snap(value(at: $0)), .live) }),
-                   in: position(range.lowerBound)...position(range.upperBound)) { editing in
-                if !editing { onChange(value, .final) }
+            Slider(value: Binding(get: { position(dragged ?? value) }, set: {
+                let new = snap(value(at: $0))
+                guard editing else { return onChange(new, .final) } // a step: there's no release to wait for
+                dragged = new
+                onChange(new, .live)
+            }), in: position(range.lowerBound)...position(range.upperBound)) { editing in
+                self.editing = editing
+                if editing { typed = nil } else { releases += 1 } // the drag wins over half-typed text
+            }
+            .onChange(of: releases) {
+                onChange(dragged ?? value, .final)
+                dragged = nil
             }
             .accessibilityLabel(title)
             .accessibilityValue("\(value.formatted(format)) \(unit)")
-            TextField(title, value: Binding(get: { value }, set: { onChange($0.clamped(to: range), .final) }), format: format)
+            TextField(title, text: Binding(get: { typed ?? value.formatted(format) }, set: { if typing { typed = $0 } }))
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .frame(width: 64)
+                .focused($typing)
+                .onSubmit(send)
+                .onChange(of: typing) {
+                    if typing {
+                        typed = value.formatted(format)
+                        sent = typed
+                    } else {
+                        send()
+                        typed = nil
+                    }
+                }
+                // Gone before focus left (another band selected): what's typed still counts.
+                .onDisappear(perform: send)
+                // The slider moved while the field had focus and nothing new is typed: follow it.
+                .onChange(of: value) { if typing, typed == sent { typed = value.formatted(format); sent = typed } }
             Text(unit).foregroundStyle(.secondary).frame(width: 22, alignment: .leading)
         }
+        .preference(key: UnsentTypingKey.self, value: typed.map { $0 != sent } ?? false)
+    }
+
+    /// Sends what's typed, if it's new and reads as a number.
+    private func send() {
+        guard let text = typed, text != sent, let number = try? format.parseStrategy.parse(text) else { return }
+        sent = text
+        onChange(number.clamped(to: limits ?? range), .final)
     }
 
     private func position(_ value: Double) -> Double { logarithmic ? log10(value) : value }
     private func value(at position: Double) -> Double { logarithmic ? pow(10, position) : position }
-    private func snap(_ value: Double) -> Double { step > 0 ? (value / step).rounded() * step : value }
 }

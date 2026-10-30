@@ -44,16 +44,20 @@ final class EqtuneStore {
 
     private(set) var status: EqtuneStatus?
     private(set) var presets: [String] = []
-    /// The active preset with exact values, read while the menu or the equalizer is open.
+    /// The active preset with exact values.
     private(set) var activePreset: Preset?
     /// Why `activePreset` couldn't be read.
     private(set) var presetProblem: Failure?
     private(set) var blocker: Blocker?
-    /// A command is running; controls disable themselves so nothing double-fires.
+    /// A command is waiting or running.
     var isBusy: Bool { inFlight > 0 }
     private var inFlight = 0
-    /// The last command that failed, shown until the next one.
+    /// The last command that failed, shown until one succeeds.
     var failure: Failure?
+    /// The last read kept earlier values because eqtune was slow to answer. They stay on
+    /// screen for one poll rather than blanking every view, but nothing is built on them: the
+    /// next command reads again first, and a second slow read in a row counts as unreachable.
+    private var readIsStale = false
     /// Output-device UID → the preset to switch to when macOS starts playing through it.
     private(set) var devicePresets: [String: String]
 
@@ -97,6 +101,11 @@ final class EqtuneStore {
         if presets.contains(name), !(allowActive && name == status?.preset) {
             return "A preset named “\(name)” already exists."
         }
+        // Library presets are known by name: one named like them would take on their title,
+        // description and original tuning.
+        if SoundLibrary.preset(name) != nil, !(allowActive && name == status?.preset) {
+            return "“\(name)” is the name of a Sound Library preset."
+        }
         return nil
     }
 
@@ -129,6 +138,8 @@ final class EqtuneStore {
     }
 
     private func load() async {
+        var kept = false
+        defer { readIsStale = kept }
         do {
             let raw: String
             do {
@@ -138,20 +149,25 @@ final class EqtuneStore {
             }
             let status = try StatusParser.parse(raw)
             let presets = try PresetParser.parseList(try await client.run(["presets"]))
-            if !surfaces.isDisjoint(with: [.menu, .editor]) {
-                do {
-                    activePreset = try await exportedPreset(status.preset)
-                    presetProblem = nil
-                } catch {
-                    activePreset = nil
-                    presetProblem = Failure(error)
-                }
-            } else {
+            // Read whether or not the menu or the equalizer is open, so either opens on the real
+            // curve instead of a flat one that jumps a moment later.
+            do {
+                activePreset = try await exportedPreset(status.preset)
+                presetProblem = nil
+            } catch let error as EqtuneError where error.isDaemonBusy && activePreset?.name == status.preset && !readIsStale {
+                kept = true // slow to answer: keep the last read once (see `readIsStale`)
+            } catch {
                 activePreset = nil
+                presetProblem = Failure(error)
             }
             self.status = status
             self.presets = presets
             blocker = nil
+        } catch let error as EqtuneError where error.isDaemonBusy && status != nil && !readIsStale {
+            // Slow to answer (the engine restarting, say): keep the last read once rather than
+            // blanking every view. Twice in a row, eqtune is treated as unreachable below.
+            kept = true
+            logger.info("eqtune was slow to answer; keeping the last read")
         } catch {
             status = nil
             presets = []
@@ -198,7 +214,43 @@ final class EqtuneStore {
     func discardEditsAndTurnOff() async { await perform(["off"], input: "d\n") }
 
     func selectPreset(_ name: String) async { await perform(["preset", "--", name]) }
-    func setBypass(_ on: Bool) async { await perform(["bypass", on ? "on" : "off"]) }
+
+    /// The preset just picked, to show as chosen until eqtune has switched to it or refused.
+    /// A switch takes about half a second; without this a list jumps back to the old preset.
+    private(set) var picked: String?
+
+    /// Switches to `name`. Picks made while a switch runs (arrow keys, quick clicks) only
+    /// change the target, so eqtune goes straight to the last one instead of through every
+    /// preset passed on the way.
+    func pick(_ name: String) {
+        guard name != (picked ?? status?.preset) else { return }
+        let switching = picked != nil
+        picked = name
+        guard !switching else { return }
+        Task {
+            while let target = picked, target != status?.preset {
+                await selectPreset(target)
+                // eqtune refused it: stop, unless something else was picked meanwhile.
+                if status?.preset != target, picked == target { break }
+            }
+            picked = nil
+        }
+    }
+    /// Only the switch changes, so only status is read back: a quick press and release keep
+    /// up with the button instead of each waiting for a full reload.
+    func setBypass(_ on: Bool) async {
+        let error = await serially { () -> Error? in
+            do {
+                _ = try await self.client.run(["bypass", on ? "on" : "off"])
+                self.status = try StatusParser.parse(try await self.client.run(["status"]))
+                self.failure = nil // as in mutate: a failure shows until something works
+                return nil
+            } catch {
+                return error
+            }
+        }
+        if let error { failure = Failure(error) }
+    }
     func setLimiter(_ on: Bool) async { await perform(["limiter", on ? "on" : "off"]) }
     func setAutoOffLowPower(_ on: Bool) async { await perform(["lowpower", on ? "on" : "off"]) }
     func setAutoOffIdle(_ on: Bool) async { await perform(["idle", on ? "on" : "off"]) }
@@ -211,20 +263,26 @@ final class EqtuneStore {
 
     // MARK: - Tuning the active preset
 
-    func setPreamp(_ db: Double) async {
-        await perform(["preamp", Self.arg(db.clamped(to: Limits.preamp))], undoable: true)
+    func setPreamp(_ db: Double, of preset: String) async {
+        await perform(["preamp", Self.arg(db.clamped(to: Limits.preamp))], undoable: true, on: preset)
     }
 
-    func autoPreamp() async { await perform(["preamp-auto"], undoable: true) }
+    func autoPreamp(of preset: String) async { await perform(["preamp-auto"], undoable: true, on: preset) }
 
-    func addBand(_ band: Band) async { await perform(Self.setCommand(band.clamped), undoable: true) }
+    func addBand(_ band: Band, to preset: String) async {
+        await perform(Self.setCommand(band.clamped), undoable: true, on: preset)
+    }
 
-    /// Moves the Bass or Treble shelf of the active preset to `db`, adding it if needed.
-    func setTone(_ tone: Tone, to db: Double) async {
+    /// Moves the Bass or Treble shelf of `name`, the active preset, to `db`, adding it if needed.
+    func setTone(_ tone: Tone, to db: Double, of name: String) async {
         let error = await mutate(undoable: true) {
-            guard let preset = self.activePreset, preset.name == self.status?.preset else { return }
+            guard let preset = self.activePreset, preset.name == name, name == self.status?.preset else { return }
             var band = preset.toneBand(tone)
-            band.db = db.clamped(to: Tone.range)
+            let target = db.clamped(to: Tone.range)
+            // Already there. A missing shelf reads as flat, so letting go where it started on a
+            // preset without one adds no flat shelf and doesn't mark the preset edited.
+            guard band.db != target else { return }
+            band.db = target
             _ = try await self.client.run(Self.setCommand(band))
         }
         if let error { failure = Failure(error) }
@@ -267,14 +325,14 @@ final class EqtuneStore {
         var errorDescription: String?
     }
 
-    func undo() async { await travel(back: true) }
-    func redo() async { await travel(back: false) }
+    func undo(of preset: String) async { await travel(back: true, of: preset) }
+    func redo(of preset: String) async { await travel(back: false, of: preset) }
 
-    /// Puts the active preset back to its tuning before (or after) the last edit, by sending
-    /// the band commands that turn what eqtune has now into that tuning.
-    private func travel(back: Bool) async {
+    /// Puts `preset`, the active one, back to its tuning before (or after) the last edit, by
+    /// sending the band commands that turn what eqtune has now into that tuning.
+    private func travel(back: Bool, of preset: String) async {
         let error = await mutate {
-            guard let current = self.activePreset, current.name == self.status?.preset,
+            guard let current = self.activePreset, current.name == preset, preset == self.status?.preset,
                   let target = back ? self.history[current.name]?.undo.popLast() : self.history[current.name]?.redo.popLast()
             else { return }
             if back { self.history[current.name]?.redo.append(current) } else { self.history[current.name]?.undo.append(current) }
@@ -300,7 +358,10 @@ final class EqtuneStore {
 
     // MARK: - Saving and discarding
 
-    func savePreset(as name: String) async { await perform(["preset-save", "--", name]) }
+    /// Saves `preset`, the active one, under its own name or as `name`.
+    func savePreset(_ preset: String, as name: String? = nil) async {
+        await perform(["preset-save", "--", name ?? preset], on: preset)
+    }
 
     /// Saves every preset with unsaved edits under its own name. `preset-save` only saves
     /// the active preset, so visit each of the others, then come back.
@@ -324,8 +385,8 @@ final class EqtuneStore {
     /// Drops every unsaved edit. eqtune discards only through `off`'s own question, so
     /// answer it with "d", then turn the EQ back on if it was on.
     func discardAll() async {
-        let wasOn = status?.isOn == true
         let error = await mutate {
+            let wasOn = self.status?.isOn == true // in the lane: after earlier commands and a fresh read
             _ = try await self.client.run(["off"], input: "d\n")
             if wasOn { _ = try await self.client.run(["on"]) }
         }
@@ -397,12 +458,22 @@ final class EqtuneStore {
     /// presets are left alone.
     func resetLibraryPreset(_ item: LibraryPreset) async {
         let error = await mutate {
-            if self.status?.preset != item.id { _ = try await self.client.run(["preset", "--", item.id]) }
-            let current = try await self.exportedPreset(item.id)
-            for args in Self.commands(from: current, to: item.preset) {
-                _ = try await self.client.run(args)
+            // Without status it can't tell which preset the band commands would land on.
+            guard let status = self.status else { throw EditError(errorDescription: "eqtune didn't answer, so nothing was reset.") }
+            // It has to switch to edit the bands; afterwards, worked or not, go back to the one in use.
+            let previous = status.preset == item.id ? nil : status.preset
+            if previous != nil { _ = try await self.client.run(["preset", "--", item.id]) }
+            do {
+                let current = try await self.exportedPreset(item.id)
+                for args in Self.commands(from: current, to: item.preset) {
+                    _ = try await self.client.run(args)
+                }
+                _ = try await self.client.run(["preset-save", "--", item.id])
+            } catch {
+                if let previous { _ = try? await self.client.run(["preset", "--", previous]) }
+                throw error
             }
-            _ = try await self.client.run(["preset-save", "--", item.id])
+            if let previous { _ = try await self.client.run(["preset", "--", previous]) }
         }
         if let error { failure = Failure(error) }
         history[item.id] = nil
@@ -437,7 +508,7 @@ final class EqtuneStore {
     /// can time out; eqtune keeps the on-intent either way. Only a readable status with the EQ
     /// off counts as a failure; while the daemon is busy, status is nil and the caller waits.
     func installEngine() async {
-        let error = await mutate {
+        let error = await mutate(reread: false) {
             _ = try await self.client.run(["install"])
             await self.waitForDaemon()
             _ = try? await self.client.run(["on"])
@@ -452,7 +523,7 @@ final class EqtuneStore {
     /// Restarts a daemon that stopped answering: `install` rewrites its LaunchAgent and
     /// restarts it, keeping the EQ on or off as it was.
     func restartEngine() async {
-        let error = await mutate {
+        let error = await mutate(reread: false) {
             _ = try await self.client.run(["install"])
             await self.waitForDaemon()
         }
@@ -470,7 +541,7 @@ final class EqtuneStore {
         let installed = EngineInstall.daemonBinary.flatMap(EqtuneBinary.version(of:))
         guard installed != bundled else { return }
         logger.info("daemon is \(installed ?? "missing", privacy: .public), bundled engine is \(bundled, privacy: .public); reinstalling")
-        _ = await mutate {
+        _ = await mutate(reread: false) {
             _ = try await self.client.run(["install"])
             await self.waitForDaemon()
         }
@@ -487,8 +558,13 @@ final class EqtuneStore {
 
     // MARK: - Plumbing
 
-    private func perform(_ args: [String], input: String? = nil, undoable: Bool = false) async {
-        let error = await mutate(undoable: undoable) { _ = try await self.client.run(args, input: input) }
+    /// `preset`: the command is for that preset, and is dropped if another one is active by
+    /// the time its turn comes (it would change or overwrite the wrong one).
+    private func perform(_ args: [String], input: String? = nil, undoable: Bool = false, on preset: String? = nil) async {
+        let error = await mutate(undoable: undoable) {
+            if let preset, self.status?.preset != preset { return }
+            _ = try await self.client.run(args, input: input)
+        }
         if let error { failure = Failure(error) }
     }
 
@@ -499,15 +575,25 @@ final class EqtuneStore {
 
     /// Runs CLI work that changes state, then re-reads it, all in one turn of the lane.
     /// `undoable` work that changed the active preset's tuning becomes an Undo step.
-    private func mutate(undoable: Bool = false, _ work: @escaping @MainActor () async throws -> Void) async -> Error? {
+    /// `reread: false` for work that reads no state (installing the engine), so it needn't wait
+    /// for eqtune to answer a read first.
+    private func mutate(undoable: Bool = false, reread: Bool = true, _ work: @escaping @MainActor () async throws -> Void) async -> Error? {
         inFlight += 1
         defer { inFlight -= 1 }
-        failure = nil
         return await serially {
+            // The last read kept old values: a command built on them could hit the wrong band
+            // or preset. Read again first; if eqtune is still too slow, the state is cleared and
+            // commands for a preset or band find nothing to act on.
+            if reread, self.readIsStale { await self.load() }
             let before = self.activePreset
             var error: Error?
             do { try await work() } catch let e { error = e }
+            // The last failure shows until something works: a retry that fails the same way
+            // leaves it in place instead of taking it away and bringing it back.
+            if error == nil { self.failure = nil }
             await self.load()
+            // A read kept now predates this command, and would pass for eqtune's answer to it.
+            if self.readIsStale { await self.load() }
             if undoable, let before, let after = self.activePreset, before.name == after.name, before != after {
                 self.history[before.name, default: History()].record(before)
             }
@@ -547,5 +633,6 @@ final class EqtuneStore {
     }
 
     /// A number as eqtune's CLI parses it (Swift's shortest round-trip form, e.g. -3.5, 1000.0).
-    private static func arg(_ value: Double) -> String { String(value) }
+    /// Rounding a small cut gives −0, which eqtune would keep and write to files as "-0.0".
+    private static func arg(_ value: Double) -> String { String(value == 0 ? 0 : value) }
 }

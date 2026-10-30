@@ -22,6 +22,8 @@ enum Dialogs {
     /// eqtune imports, duplicates, renames, deletes and resets presets only when no preset has
     /// unsaved edits. Asks to save or discard them; returns whether `change` may go ahead.
     static func resolveBeforeChanging(_ store: EqtuneStore) async -> Bool {
+        // An edit on its way may be about to leave a preset unsaved: read status after it.
+        if store.isBusy { await store.refresh() }
         guard store.hasUnsavedEdits, let dirty = store.status?.dirtyPresets else { return true }
         let verb = dirty.count == 1 ? "has" : "have"
         switch ask("Save your changes first?", "\(list(dirty)) \(verb) unsaved changes. Save or discard them to continue.") {

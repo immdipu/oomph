@@ -63,7 +63,44 @@ struct EqtuneStoreTests {
         let band = try #require(store.activePreset?.bands.first)
         await store.editBand(band, of: "bass", to: nil) // another preset is active now
         await store.editBand(Band(kind: .peaking, hz: 700, db: 0, q: 1), of: "mellow", to: nil) // band gone
+        // Queued for "bass" but "mellow" is active: saving would write mellow's tuning over bass.
+        await store.savePreset("bass")
+        await store.setPreamp(-6, of: "bass")
+        await store.autoPreamp(of: "bass")
+        await store.addBand(Band(kind: .peaking, hz: 700, db: 3, q: 1), to: "bass")
+        await store.setTone(.bass, to: 3, of: "bass")
         #expect(await edits(client).isEmpty)
+        await store.savePreset("mellow", as: "mellow-copy")
+        #expect(await edits(client) == [["preset-save", "--", "mellow-copy"]])
+    }
+
+    /// A read eqtune is too slow to give keeps the last one once, never twice, and a command
+    /// reads again before acting rather than building on it.
+    @Test func aSlowReadIsKeptOnceAndNeverBuiltOn() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        let band = try #require(store.activePreset?.bands.first { $0.hz == 500 })
+        await client.setBusy(["preset-export"])
+        await store.refresh()
+        #expect(store.activePreset?.bands.contains(band) == true)
+        await store.refresh()
+        #expect(store.activePreset == nil && store.presetProblem != nil)
+
+        await client.setBusy([])
+        await store.refresh()
+        await client.setBusy(["preset-export"])
+        await store.refresh() // kept: still shows the band at 500
+        // Meanwhile the band moved to 630 (from the command line, say).
+        await client.setOutput(try await fixtureFromMock().replacingOccurrences(of: "freq = 500.0", with: "freq = 630.0"), for: "preset-export")
+        await client.setBusy([])
+        await store.editBand(band, of: "mellow", to: Band(kind: band.kind, hz: band.hz, db: 2, q: band.q))
+        #expect(await edits(client).isEmpty, "built a command on the kept read: it would add a band at 500")
+
+        // A command's own read is never kept: what it shows is eqtune's answer to it, or nothing.
+        let moved = try #require(store.activePreset?.bands.first { $0.hz == 630 })
+        await client.setBusy(["preset-export"])
+        await store.editBand(moved, of: "mellow", to: Band(kind: moved.kind, hz: moved.hz, db: 1, q: moved.q))
+        #expect(store.activePreset == nil)
     }
 
     @Test func newPresetNamesAvoidExistingAndReservedOnes() async {
@@ -75,6 +112,8 @@ struct EqtuneStoreTests {
         #expect(store.nameProblem("bright", allowActive: true) != nil) // shipped: would overwrite
         #expect(store.nameProblem("none", allowActive: true) != nil)
         #expect(store.nameProblem("has space", allowActive: true) != nil)
+        #expect(store.nameProblem("rock", allowActive: false) != nil) // a Sound Library preset's name
+        #expect(store.availableName("rock") == "rock-2")
         #expect(store.availableName("mellow") == "mellow-2")
         #expect(store.availableName("Sennheiser HD 600") == "Sennheiser-HD-600")
         #expect(store.availableName("  ") == "preset")
@@ -90,14 +129,26 @@ struct EqtuneStoreTests {
         await client.setOutput(edited, for: "preset-export")
         await store.editBand(band, of: "mellow", to: Band(kind: .peaking, hz: 500, db: -1, q: 1.41))
         #expect(store.canUndo && !store.canRedo)
+        await store.undo(of: "bass") // pressed for a preset another switch has since replaced: dropped
+        #expect(store.canUndo && !store.canRedo)
         await client.setOutput(original, for: "preset-export")
-        await store.undo()
+        await store.undo(of: "mellow")
         #expect(await edits(client).suffix(1) == [["band", "500.0", "-3.0", "1.41"]])
         #expect(!store.canUndo && store.canRedo)
+        await store.redo(of: "bass")
+        #expect(!store.canUndo && store.canRedo)
         await client.setOutput(edited, for: "preset-export")
-        await store.redo()
+        await store.redo(of: "mellow")
         #expect(await edits(client).suffix(1) == [["band", "500.0", "-1.0", "1.41"]])
         #expect(store.canUndo && !store.canRedo)
+    }
+
+    @Test func negativeZeroIsSentAsZero() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        let band = try #require(store.activePreset?.bands.first { $0.hz == 500 })
+        await store.editBand(band, of: "mellow", to: Band(kind: band.kind, hz: band.hz, db: -0.0, q: band.q))
+        #expect(await edits(client).first?[2] == "0.0")
     }
 
     @Test func commandsRemoveSetAndLevel() {
@@ -117,7 +168,7 @@ struct EqtuneStoreTests {
     @Test func toneControlsMoveOrAddShelves() async throws {
         let (store, client) = await editorStore()
         defer { store.setVisible(.editor, false) }
-        await store.setTone(.bass, to: 6)
+        await store.setTone(.bass, to: 6, of: "mellow")
         #expect(await edits(client).last == ["low-shelf", "100.0", "6.0", "0.70710677"])
         let preset = try #require(store.activePreset)
         let treble = Preset(name: "t", preampDB: 0, bands: [Band(kind: .peaking, hz: 9000, db: 1, q: 1)]).toneBand(.treble)
@@ -165,13 +216,15 @@ struct EqtuneStoreTests {
         let (store, client) = await editorStore()
         defer { store.setVisible(.editor, false) }
         let item = try #require(SoundLibrary.preset("bass-boost"))
+        let inUse = try #require(store.status?.preset)
         await store.resetLibraryPreset(item)
         let sent = await edits(client)
         #expect(sent.first == ["preset", "--", "bass-boost"])
-        #expect(sent.last == ["preset-save", "--", "bass-boost"])
+        // It switched only to edit the bands: after saving, it goes back to the preset in use.
+        #expect(Array(sent.suffix(2)) == [["preset-save", "--", "bass-boost"], ["preset", "--", inUse]])
         // The mock reports mellow's bands, so all of them go and the library's arrive.
         let current = try PresetParser.parseExport(#require(await client.outputs["preset-export"]))
-        #expect(Array(sent.dropFirst().dropLast()) == EqtuneStore.commands(from: current, to: item.preset))
+        #expect(Array(sent.dropFirst().dropLast(2)) == EqtuneStore.commands(from: current, to: item.preset))
         #expect(sent.contains(["low-shelf", "105.0", "6.0", "0.71"]))
     }
 

@@ -61,9 +61,13 @@ actor MockEqtuneClient: EqtuneClient {
     /// The files handed to `preset-import`, read when it ran (Oomph deletes them after).
     private(set) var imported: [String] = []
 
+    /// Commands that time out, the way eqtune does when it's too busy to answer.
+    private var busy: Set<String> = []
+
     func run(_ args: [String], input: String?) async throws -> String {
         calls.append(args)
         inputs.append(input)
+        if busy.contains(args.first ?? "") { throw EqtuneError.timeout }
         if args.first == "preset-export", let path = args.last {
             try outputs["preset-export", default: ""].write(toFile: path, atomically: true, encoding: .utf8)
             return ""
@@ -76,5 +80,9 @@ actor MockEqtuneClient: EqtuneClient {
 
     func setOutput(_ output: String, for command: String) {
         outputs[command] = output
+    }
+
+    func setBusy(_ commands: Set<String>) {
+        busy = commands
     }
 }

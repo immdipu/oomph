@@ -7,16 +7,12 @@ struct PresetSidebar: View {
     @Environment(AudioOutputs.self) private var outputs
     @State private var nameRequest: NameRequest?
     @State private var pendingDelete: String?
-    /// The preset just clicked, shown as selected until eqtune has switched to it or
-    /// refused. A switch takes eqtune about half a second; without this the list jumps
-    /// back to the old preset meanwhile.
-    @State private var picked: String?
     /// Library presets being added: their rows show progress, and another click on one is
     /// ignored instead of adding it twice.
     @State private var adding: Set<String> = []
 
     var body: some View {
-        List(selection: Binding(get: { picked ?? store.status?.preset }, set: { if let name = $0 { pick(name) } })) {
+        List(selection: Binding(get: { store.picked ?? store.status?.preset }, set: { if let name = $0 { store.pick(name) } })) {
             Section("My Presets") {
                 ForEach(store.presets, id: \.self) { name in
                     row(name)
@@ -53,24 +49,6 @@ struct PresetSidebar: View {
         } message: { _ in
             // eqtune's own presets too: only eqtune's command line can bring one back.
             Text("This can’t be undone. Export it first if you might want it again.")
-        }
-    }
-
-    /// Switches to `name`, keeping it selected while eqtune switches. Picks made meanwhile
-    /// (arrow keys, quick clicks) only change the target, so eqtune goes straight to the
-    /// last one instead of through every preset passed on the way.
-    private func pick(_ name: String) {
-        guard name != (picked ?? store.status?.preset) else { return }
-        let switching = picked != nil
-        picked = name
-        guard !switching else { return }
-        Task {
-            while let target = picked, target != store.status?.preset {
-                await store.selectPreset(target)
-                // eqtune refused it: stop, unless something else was picked meanwhile.
-                if store.status?.preset != target, picked == target { break }
-            }
-            picked = nil
         }
     }
 
@@ -130,7 +108,7 @@ struct PresetSidebar: View {
 
     @ViewBuilder private func menu(for name: String) -> some View {
         if store.status?.dirtyPresets.contains(name) == true, name == store.status?.preset {
-            Button("Save Changes") { Task { await store.savePreset(as: name) } }
+            Button("Save Changes") { Task { await store.savePreset(name) } }
             Divider()
         }
         Button("Duplicate…") {
@@ -182,7 +160,7 @@ struct PresetSidebar: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("New preset, or import one")
-            .disabled(store.status == nil || store.isBusy)
+            .disabled(store.status == nil)
             Spacer()
             // Here rather than in the toolbar, where its slot would sit in a button's glass.
             BusyIndicator(isBusy: store.isBusy)

@@ -57,6 +57,10 @@ private struct GeneralSettings: View {
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
         .onAppear { loginItem = SMAppService.mainApp.status }
+        // Back from System Settings' Login Items, where it may have just been allowed or removed.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            loginItem = SMAppService.mainApp.status
+        }
     }
 
     private func setLaunchAtLogin(_ on: Bool) {
@@ -113,6 +117,8 @@ private struct EngineSettings: View {
     @Environment(EqtuneStore.self) private var store
     @AppStorage(EqtuneBinary.overrideKey) private var customPath = ""
     @State private var confirmUninstall = false
+    /// Restarting takes seconds; a second click meanwhile would restart it again.
+    @State private var restarting = false
 
     var body: some View {
         Form {
@@ -142,11 +148,17 @@ private struct EngineSettings: View {
                     LabeledContent("Status", value: "Not reachable")
                 }
                 HStack {
-                    Button("Restart Engine") { Task { await store.restartEngine() } }
-                        .disabled(store.isBusy || store.blocker == .notInstalled)
+                    Button("Restart Engine") {
+                        restarting = true
+                        Task {
+                            await store.restartEngine()
+                            restarting = false
+                        }
+                    }
+                    .disabled(restarting || store.blocker == .notInstalled)
                     Spacer()
                     Button("Uninstall Engine…", role: .destructive) { confirmUninstall = true }
-                        .disabled(store.isBusy || store.blocker == .notInstalled)
+                        .disabled(store.blocker == .notInstalled)
                 }
                 if let failure = store.failure {
                     FailureBanner(failure: failure) { store.failure = nil }
