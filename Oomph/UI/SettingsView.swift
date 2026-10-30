@@ -74,7 +74,8 @@ private struct GeneralSettings: View {
     }
 }
 
-/// A preset per output: headphones get their correction, speakers get theirs.
+/// A preset per output: headphones get their correction, speakers get theirs, and a studio
+/// interface can get no EQ at all.
 private struct DeviceSettings: View {
     @Environment(EqtuneStore.self) private var store
     @Environment(AudioOutputs.self) private var outputs
@@ -86,30 +87,42 @@ private struct DeviceSettings: View {
                     Text("No audio outputs found.").foregroundStyle(.secondary)
                 }
                 ForEach(outputs.devices) { device in
-                    Picker(selection: Binding(get: { store.devicePresets[device.id] ?? "" },
-                                              set: { store.setDevicePreset($0.isEmpty ? nil : $0, for: device.id) })) {
-                        Text("Don’t switch").tag("")
-                        Divider()
-                        ForEach(store.presets, id: \.self) { Text(displayName($0)).tag($0) }
-                    } label: {
-                        Label {
-                            Text(device.name)
-                            if device.id == outputs.current?.id { Text("Current output") }
-                        } icon: {
-                            Image(systemName: device.symbol)
-                        }
+                    picker(for: device.id, unset: store.devicePresets[EqtuneStore.otherOutputs] == nil ? "Don’t switch" : "Same as other outputs") {
+                        Text(device.name)
+                        if device.id == outputs.current?.id { Text("Current output") }
+                    } icon: {
+                        Image(systemName: device.symbol)
                     }
-                    .disabled(store.presets.isEmpty)
+                }
+                picker(for: EqtuneStore.otherOutputs, unset: "Don’t switch") {
+                    Text("Other outputs")
+                    Text("Any output without a choice of its own, including ones you connect later")
+                } icon: {
+                    Image(systemName: "ellipsis.circle")
                 }
             } header: {
                 Text("Preset for each output")
             } footer: {
-                Text("When macOS starts playing through one of these, Oomph switches to its preset. Oomph has to be running for this, so turn on Launch at Login.")
+                Text("When macOS starts playing through one of these, Oomph switches to its preset, or turns the EQ off for No EQ and back on for the next output. Oomph has to be running for this, so turn on Launch at Login.")
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func picker(for key: String, unset: String, @ViewBuilder title: () -> some View,
+                        @ViewBuilder icon: () -> some View) -> some View {
+        Picker(selection: Binding(get: { store.devicePresets[key] ?? "" },
+                                  set: { store.setDevicePreset($0.isEmpty ? nil : $0, for: key) })) {
+            Text(unset).tag("")
+            Text("No EQ").tag(EqtuneStore.noEQ)
+            Divider()
+            ForEach(store.presets, id: \.self) { Text(displayName($0)).tag($0) }
+        } label: {
+            Label(title: title, icon: icon)
+        }
+        .disabled(store.presets.isEmpty)
     }
 }
 

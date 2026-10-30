@@ -41,7 +41,9 @@ the menu bar and adds the tools that make an EQ useful to everyone.
 - **Hold to Compare.** Press and hold to hear your Mac without the EQ, let go to hear it
   again. Quick A/B switching is the surest way to tell whether a change actually sounds better.
 - **A preset for each output.** Tick *Always use this preset on AirPods* once, and Oomph
-  switches presets whenever macOS switches outputs.
+  switches presets whenever macOS switches outputs. In Settings › Devices, pick *No EQ* for
+  an output that should sound untouched (an audio interface, say), and one preset for every
+  other output.
 - **Find your headphones.** Search [AutoEq](https://autoeq.app)'s measured corrections for
   more than 8,000 headphones and earbuds, pick yours, and Oomph adds a preset that evens out
   their sound.
@@ -121,6 +123,7 @@ once the EQ is on.
 | Change how wide a band is | Hover the graph with the band selected and scroll |
 | Correct your headphones | Equalizer › **+** › *Find Your Headphones…* |
 | Use a preset on one output | Tick *Always use … on (device)* in the menu, or Settings › Devices |
+| Keep the EQ off on one output | Settings › Devices › *No EQ* |
 | Keep your changes | **Save** (⌘S), or **Save As…** for a new preset |
 
 Edits apply live. Like eqtune, Oomph keeps them as *unsaved changes* until you save or reset them,
