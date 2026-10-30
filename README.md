@@ -1,116 +1,221 @@
-# Oomph
+<p align="center">
+  <img src="Docs/images/icon.png" width="128" height="128" alt="Oomph app icon">
+</p>
 
-Oomph is a menu bar GUI for the open-source eqtune CLI by y7nieSEl5.
+<h1 align="center">Oomph</h1>
 
-[eqtune](https://github.com/y7nieSEl5/eqtune) is a system-wide equalizer for macOS that runs as
-a background daemon. Oomph puts it in the menu bar: turn the EQ on and off, pick a preset, A/B
-it with bypass, and edit bands with a live frequency-response curve. Oomph does no audio
-processing of its own. Every action runs an `eqtune` command, and everything on screen is what
-`eqtune status` reports.
+<p align="center">
+  <strong>A system-wide equalizer for macOS that lives in your menu bar.</strong><br>
+  Make every app sound better, whether you know what a Q factor is or not.
+</p>
+
+<p align="center">
+  <a href="https://github.com/immdipu/oomph/actions/workflows/ci.yml"><img src="https://github.com/immdipu/oomph/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/macOS-14.2%2B-blue" alt="macOS 14.2 or later">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-native-black" alt="Apple Silicon">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Docs/images/equalizer-dark.png">
+    <img src="Docs/images/equalizer-light.png" alt="Oomph's equalizer window: presets on the left, an interactive EQ curve with numbered bands, and a guide to what each frequency range sounds like" width="880">
+  </picture>
+</p>
+
+Oomph is a native SwiftUI front end for [eqtune](https://github.com/y7nieSEl5/eqtune), the
+open-source system-wide EQ engine by y7nieSEl5. eqtune taps your Mac's audio with Core Audio's
+process-tap API (no drivers, no kernel extensions) and plays it back through your current output,
+so plugging in headphones keeps working the way macOS normally does. Oomph puts all of that in
+the menu bar and adds the tools that make an EQ useful to everyone.
+
+## Features
+
+### For everyone
+
+- **Bass and Treble, right in the menu bar.** The two knobs every stereo has, with a live
+  preview of the curve.
+- **A Sound Library of ready-made tunings**: Bass Boost, Treble Reducer, Laptop Speakers,
+  Loudness, Vocal Clarity, Dialogue, Electronic, Rock, Footsteps and more, each with a
+  one-line description of what it's for.
+- **Hold to Compare.** Press and hold to hear your Mac without the EQ, let go to hear it
+  again. Quick A/B switching is the surest way to tell whether a change actually sounds better.
+- **A preset for each output.** Tick *Always use this preset on AirPods* once, and Oomph
+  switches presets whenever macOS switches outputs.
+- **Distortion guard.** When boosts would push loud audio past full scale, Oomph says so and
+  fixes it in one click.
+- **Plain-language guidance.** The graph names each part of the spectrum (sub-bass, bass,
+  low mids, mids, upper mids, treble), and every band says what boosting or cutting it does:
+  *"Low mids: clears up muddy, boxy sound."*
+
+### For audio nerds
+
+- **Interactive parametric EQ.** Drag a band's point to set frequency and gain, scroll to set
+  its width (Q), double-click to add a band, use the arrow keys to nudge and Delete to remove.
+  Hold ⇧ to change only the gain.
+- **Peak, low-shelf and high-shelf filters**, up to 64 bands, edited at full precision.
+  Oomph works from eqtune's exact preset export, not its rounded display.
+- **Headphone correction from [AutoEq](https://autoeq.app).** Import Equalizer APO /
+  AutoEq parametric files for thousands of headphones; filters eqtune can't play are listed,
+  never silently dropped.
+- **Undo and redo** (⌘Z / ⇧⌘Z) for every band and preamp change.
+- **Full preset management**: new, duplicate, rename, delete, export and import (TOML), and
+  reset eqtune's own presets to their originals.
+- **Preamp with headroom readout** and *Auto* to fit the biggest boost.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Docs/images/menu-dark.png">
+    <img src="Docs/images/menu-light.png" alt="The Oomph menu bar popover with the EQ switch, a curve preview, Bass and Treble sliders, presets and Hold to Compare" width="320">
+  </picture>
+</p>
 
 ## Requirements
 
-- An Apple Silicon Mac with macOS 14.2 or later (eqtune's audio engine uses process taps,
-  which arrived in 14.2).
-- To build: Xcode 16 or later (developed with Xcode 27.1) and the Rust toolchain
-  (`cargo`, from [rustup.rs](https://rustup.rs)). Oomph builds its own copy of eqtune from source.
+- An Apple Silicon Mac with **macOS 14.2 or later** (eqtune's process taps arrived in 14.2).
+- To build: **Xcode 16 or later** and the **Rust toolchain** (`cargo`, from
+  [rustup.rs](https://rustup.rs)). Oomph builds its own copy of eqtune from source.
 
-## Build
+## Getting started
+
+There's no signed download yet, so build it yourself; it takes a couple of minutes.
 
 ```bash
-git submodule update --init
+git clone --recurse-submodules https://github.com/immdipu/oomph.git
 ```
 
 ```bash
-xcodebuild -project EQTuneBar.xcodeproj -scheme EQTuneBar -configuration Debug -derivedDataPath build build
+cd oomph && xcodebuild -project Oomph.xcodeproj -scheme Oomph -configuration Release -derivedDataPath build build
 ```
 
-The app is `build/Build/Products/Debug/Oomph.app`; you can also open `EQTuneBar.xcodeproj` and
-press Run. Signing uses your "Apple Development" certificate with the team set in the project
-(`DEVELOPMENT_TEAM`); change it to your own team before building on another Mac.
+Then open `build/Build/Products/Release/Oomph.app`, or open `Oomph.xcodeproj` in Xcode and
+press Run. Signing uses an "Apple Development" certificate and the team set in the project
+(`DEVELOPMENT_TEAM`); set your own team before building on another Mac.
 
-The **Build eqtune engine** phase (`Scripts/build-eqtune.sh`) runs
-`cargo build --release --locked` on the `Vendor/eqtune` submodule (pinned to v0.7.1), copies the
-binary to `Oomph.app/Contents/Helpers/eqtune`, signs it with the app's identity (Hardened
-Runtime) and copies eqtune's licenses to `Contents/Resources/Licenses`. The first build compiles
-eqtune's crates and takes about a minute; after that cargo has nothing to do. If `cargo` is
-missing, the build stops with an error saying so.
+On first launch Oomph shows a short setup screen. **Install Audio Engine** installs eqtune's
+background process and turns the EQ on. macOS then asks once for permission to capture system
+audio; eqtune answers nothing until you respond, so the setup window waits and closes itself
+once the EQ is on.
 
-Run the unit tests (parsers, response math):
+## Using Oomph
 
-```bash
-xcodebuild test -project EQTuneBar.xcodeproj -scheme EQTuneBar -destination 'platform=macOS,arch=arm64' -derivedDataPath build
-```
+| To… | Do this |
+|---|---|
+| Turn the EQ on or off | The switch at the top of the menu |
+| Make it punchier or brighter | Drag **Bass** or **Treble** in the menu |
+| Try a ready-made sound | **Sound Library** in the menu, or the library in the Equalizer sidebar |
+| Hear the difference | Press and hold **Hold to Compare** |
+| Shape the sound precisely | **Equalizer**, then drag the numbered points |
+| Change how wide a band is | Hover the graph with the band selected and scroll |
+| Correct your headphones | Equalizer › **+** › *Import Headphone Correction…* |
+| Use a preset on one output | Tick *Always use … on (device)* in the menu, or Settings › Devices |
+| Keep your changes | **Save** (⌘S), or **Save As…** for a new preset |
 
-## Installing the eqtune engine
-
-Nothing to do by hand: Oomph ships eqtune inside the app. On first launch, if the engine isn't
-installed, Oomph shows a setup screen; **Install engine** runs `eqtune install` (which copies
-the engine to `~/Library/Application Support/eqtune` and registers a LaunchAgent) and then
-`eqtune on`. macOS then asks once for audio-capture permission. eqtune doesn't answer
-anything until you respond, so the setup window waits and closes itself once the EQ is on.
-
-On every launch Oomph compares the installed engine's version with the bundled one and quietly
-re-runs `eqtune install` if they differ (for example after updating Oomph). Moving Oomph.app
-doesn't affect the engine, because the daemon runs from its own copy.
-
-**Settings → Uninstall engine** runs `eqtune uninstall`. It stops the daemon and removes it;
-eqtune's presets stay in `~/Library/Application Support/eqtune`.
-
-To use eqtune from Terminal as well, install the CLI the usual way:
-
-```bash
-cargo install --locked eqtune && eqtune install
-```
-
-Oomph picks its binary in this order: the bundled engine, the path set in Settings, then
-`~/.cargo/bin/eqtune` (then `/usr/local/bin` and `/opt/homebrew/bin`).
+Edits apply live. Like eqtune, Oomph keeps them as *unsaved changes* until you save or revert,
+and marks edited presets with an orange dot.
 
 ## How it works
 
-- `EQTuneBar/Core/ProcessEqtuneClient.swift` runs the CLI off the main thread with stdin at
-  `/dev/null` and a 5-second timeout, and logs each command with its exit code
-  (`log stream --predicate 'subsystem == "com.dipu.eqtunebar"'`). Everything goes through the
-  `EqtuneClient` protocol, so a Unix-socket client could replace it later.
-- `EqtuneStore` keeps only the latest `status`, preset list and (while the editor is open) the
-  active preset. It polls every 2 seconds while the menu or a window is open and not at all
-  otherwise. CLI calls run one at a time.
+```
+Oomph (SwiftUI) ── runs ──▶ eqtune CLI ── Unix socket ──▶ eqtune daemon (LaunchAgent)
+                                                            │
+       system audio ─▶ Core Audio process tap ─▶ biquad EQ + preamp + soft limiter ─▶ your output
+```
+
+Oomph does no audio processing of its own. Every action runs an `eqtune` command, and
+everything on screen is what eqtune reports back, so the UI can't drift from the engine.
+
+- `Oomph/Core/ProcessEqtuneClient.swift` runs the CLI off the main thread with stdin at
+  `/dev/null` and a 5-second timeout, and logs every command with its exit code. Everything goes
+  through the `EqtuneClient` protocol, so a Unix-socket client could replace it later.
+- `EqtuneStore` keeps only the latest `status`, preset list and active preset. It polls every
+  2 seconds while the menu or a window is open and not at all otherwise, and runs CLI calls
+  one at a time. Undo/redo sends the band commands that turn the current tuning into the earlier one.
+- `AudioOutputs` watches Core Audio's default output so presets can follow devices.
+- The frequency-response curve is computed in Swift from the same RBJ biquads eqtune uses, and
+  the tests check it against eqtune's own `response` output.
 - The parsers are written against real eqtune 0.7.1 output: see
   [Docs/cli-samples.md](Docs/cli-samples.md).
 
+The **Build eqtune engine** phase (`Scripts/build-eqtune.sh`) runs `cargo build --release
+--locked` on the `Vendor/eqtune` submodule (pinned to v0.7.1), copies the binary to
+`Oomph.app/Contents/Helpers/eqtune`, signs it with the app's identity (Hardened Runtime) and
+copies eqtune's licenses to `Contents/Resources/Licenses`. On every launch Oomph compares the
+installed engine's version with the bundled one and reinstalls it if they differ (for example
+after updating Oomph). The daemon runs from its own copy in
+`~/Library/Application Support/eqtune`, so moving Oomph.app doesn't affect it.
+
+## Development
+
+```bash
+xcodebuild test -project Oomph.xcodeproj -scheme Oomph -destination 'platform=macOS,arch=arm64' -derivedDataPath build
+```
+
+The tests cover the parsers, the response math, AutoEq import, the Sound Library's limits
+and headroom, and the store's command sequences (band moves, undo, save and discard, device
+switching) against a mock eqtune, so they never touch your real EQ.
+
+```
+Oomph/
+  App/        entry point, app delegate (onboarding, Dock icon, device switching)
+  Core/       eqtune client and parsers, the store, models and DSP math, Sound Library,
+              AutoEq import, Core Audio outputs
+  UI/         menu bar popover, equalizer window, graph, inspector, settings, onboarding
+OomphTests/   Swift Testing suites, with captured eqtune output in Fixtures/
+Vendor/eqtune the audio engine (git submodule)
+```
+
+Follow the CLI calls as they happen:
+
+```bash
+log stream --predicate 'subsystem == "com.dipu.eqtunebar"'
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and how to propose changes.
+
+## FAQ
+
+**Does Oomph change my output device?** No. eqtune taps the audio and plays it back to whatever
+output macOS is using, so AirPods, Bluetooth speakers and the headphone jack switch as usual.
+
+**What does it cost in battery?** Real-time processing always uses some power. By default the
+engine pauses while nothing is playing and in Low Power Mode (Settings › Engine).
+
+**Why does macOS ask for audio-capture permission again?** `eqtune install` signs the daemon
+ad hoc, so each new engine version looks like a new app to macOS. That happens only after an
+Oomph update that ships a new eqtune.
+
+**Can I still use eqtune from Terminal?** Yes, and Oomph shows the changes. Install the CLI
+with `cargo install --locked eqtune`.
+
+**Where are my presets?** In `~/Library/Application Support/eqtune/config.toml`, managed by
+eqtune. Uninstalling the engine (Settings › Engine) keeps them.
+
 ## Known limitations
 
-- **eqtune's output is not a stable API.** Oomph parses the human-readable text of `status`,
-  `ls`, `preset-show` and `preset-export`, pinned to eqtune 0.7.x. If a future eqtune changes the
+- **eqtune's text output is not a stable API.** Oomph parses `status`, `presets`,
+  `preset-show` and `preset-export` as eqtune 0.7.x prints them. If a future eqtune changes the
   format, Oomph shows "couldn't read eqtune's output" with the raw text instead of guessing.
-- **Discarding unsaved edits answers eqtune's prompt.** `eqtune off` has no flag for it, and
-  switching presets keeps edits, so **Discard** runs `eqtune off` with `d` typed on its stdin.
-  That is the only command not run with stdin at `/dev/null`. The EQ is already off by the time
-  the question appears, so **Cancel** leaves it off with the edits still unsaved.
-- **The band editor reads `preset-export`, not `preset-show`.** `preset-show` rounds (10 Hz
-  steps above 1 kHz, 0.1 dB, 0.01 Q), while eqtune matches a band only within 0.5 Hz, so editing
-  from it could change or duplicate bands. The editor shows exact values from a temporary
-  export, changes only the field you touched, and won't move a band onto another band's
-  frequency (eqtune would merge them). The `preset-show` parser is kept and tested as
-  specified, but the app doesn't need it.
-- **eqtune never clears `last error`.** Oomph shows the yellow warning and the red dot only while
-  the EQ should be running and isn't (auto-off pauses don't count), not for an old error.
-- **eqtune handles one request at a time** and can be busy for several seconds while it starts
-  its audio engine. A command can then report "eqtune was busy"; the next refresh shows what
-  actually happened.
-- **macOS asks for audio-capture permission again after an engine update.** `eqtune install`
-  signs the daemon ad hoc, so each new engine binary looks like a new app to macOS.
-- **The binary path in Settings is a fallback.** It's used only if the bundled engine is
-  missing.
-- **Untested: a downloaded copy.** `eqtune install` copies the engine with its file attributes
-  and signs the copy ad hoc. If Oomph is downloaded (and quarantined), Gatekeeper may refuse to
-  start that copy. Check this before distributing builds.
-- **The menu bar icon updates while Oomph is polling.** Changes made from Terminal while the
-  menu is closed show up the next time you open it.
-- **Not in v1:** global hotkeys, AutoEQ/headphone profile import, per-app or per-device EQ, a
-  direct socket connection, App Store distribution, Intel builds.
+- **Discarding edits restarts the engine for a moment.** eqtune discards unsaved edits only
+  through `eqtune off`'s own prompt, so Oomph answers it and turns the EQ back on.
+- **Some preset changes need saved edits.** eqtune refuses to import, duplicate, rename, delete
+  or reset presets while any preset has unsaved edits; Oomph asks you to save or discard first.
+- **Presets follow outputs only while Oomph runs.** Turn on Launch at Login in Settings.
+- **eqtune handles one request at a time** and can be busy for a few seconds while its audio
+  engine starts. A command can then report "eqtune was busy"; the next refresh shows what happened.
+- **eqtune never clears `last error`.** Oomph shows a warning only while the EQ should be running
+  and isn't (auto-off pauses don't count).
+- **Untested: a downloaded copy.** `eqtune install` copies the engine and signs the copy ad hoc.
+  If Oomph is downloaded (and quarantined), Gatekeeper may refuse to start that copy.
+- **Not yet:** global hotkeys, a spectrum analyzer, per-app EQ, Intel builds, signed releases.
 
-## Licenses
+## Contributing
+
+Bug reports, ideas and pull requests are welcome. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md), and report
+security issues privately as described in [SECURITY.md](SECURITY.md).
+
+## License
 
 Oomph is released under the [MIT License](LICENSE).
 

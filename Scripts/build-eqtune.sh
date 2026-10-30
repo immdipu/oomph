@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds the eqtune engine from the Vendor/eqtune submodule and bundles it as
 # Oomph.app/Contents/Helpers/eqtune, signed with the app's identity, plus its
-# licenses. Run by the "Build eqtune engine" phase of the EQTuneBar target.
+# licenses. Run by the "Build eqtune engine" phase of the Oomph target.
 set -eu
 
 SRC="$SRCROOT/Vendor/eqtune"

@@ -2,13 +2,13 @@
 
 Real output from `eqtune 0.7.1` (the version pinned in `Vendor/eqtune`), captured on the
 development Mac on 2026-10-29. Oomph's parsers are written against this text, and the
-files in `EQTuneBarTests/Fixtures/` are the same captures. eqtune's human output has no
+files in `OomphTests/Fixtures/` are the same captures. eqtune's human output has no
 stability promise (only `response` has a JSON mode), so re-check this page when the
 submodule moves to a new eqtune version.
 
 ## `eqtune status`
 
-`EQTuneBarTests/Fixtures/status-on.txt`:
+`OomphTests/Fixtures/status-on.txt`:
 
 ```
 intent:        on
@@ -124,7 +124,7 @@ q = 1.0
 
 31 one-third-octave points; `gain_db` includes the preamp. Oomph's chart computes its own
 curve from the band parameters and its tests check it against this output
-(`EQTuneBarTests/Fixtures/bass-response.json`):
+(`OomphTests/Fixtures/bass-response.json`):
 
 ```
 {
