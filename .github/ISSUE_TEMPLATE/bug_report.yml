@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in Oomph doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. If the problem is the sound itself (dropouts,
+        crackles, a device that won't process), it may be an [eqtune](https://github.com/y7nieSEl5/eqtune/issues) issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Equalizer
+        2. Drag band 3 to 2 kHz
+        3. …
+  - type: input
+    id: oomph-version
+    attributes:
+      label: Oomph version
+      description: Settings › About
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version and Mac model
+      placeholder: macOS 15.1, MacBook Air M2
+    validations:
+      required: true
+  - type: input
+    id: output
+    attributes:
+      label: Output device
+      placeholder: AirPods Pro, built-in speakers, a USB DAC…
+  - type: textarea
+    id: status
+    attributes:
+      label: eqtune status
+      description: Paste the output of `~/Library/Application\ Support/eqtune/eqtune status` in Terminal.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional. Run `log show --last 5m --predicate 'subsystem == "com.dipu.eqtunebar"'` after reproducing.
+      render: text

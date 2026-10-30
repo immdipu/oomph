@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request makes the running build moot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      # The build compiles the bundled eqtune engine from Vendor/eqtune.
+      - uses: dtolnay/rust-toolchain@stable
+
+      # No signing identity on CI; the build script skips signing the engine to match.
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project Oomph.xcodeproj -scheme Oomph \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO

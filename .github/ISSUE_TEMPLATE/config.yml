@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Audio engine (eqtune) issues
+    url: https://github.com/y7nieSEl5/eqtune/issues
+    about: Problems with the sound itself, device support or CPU use usually belong to eqtune.
+  - name: Security vulnerability
+    url: https://github.com/immdipu/oomph/security/advisories/new
+    about: Please report security issues privately.

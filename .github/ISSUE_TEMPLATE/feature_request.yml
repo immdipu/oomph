@@ -1,0 +1,24 @@
+name: Feature request
+description: An idea that would make Oomph better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation and what gets in the way, rather than a specific solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you'd like it to work. Sketches and examples from other apps are welcome.
+  - type: dropdown
+    id: who
+    attributes:
+      label: Who is this for?
+      options:
+        - Everyday listening
+        - Headphone and audio enthusiasts
+        - Both
