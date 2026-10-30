@@ -126,8 +126,7 @@ enum Dialogs {
 
     // MARK: - Files
 
-    /// Asks for an eqtune preset or an Equalizer APO / AutoEq file, imports it under a free
-    /// name, and says which filters it couldn't use.
+    /// Asks for an eqtune preset or an Equalizer APO / AutoEq file and imports it.
     static func importPreset(store: EqtuneStore) async {
         let panel = NSOpenPanel()
         panel.message = "Choose an Oomph or eqtune preset (.toml), or a parametric EQ file from AutoEq or Equalizer APO (.txt)."
@@ -136,39 +135,31 @@ enum Dialogs {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let text = try String(contentsOf: url, encoding: .utf8)
-            let result = try PresetImport.read(text, name: store.availableName(PresetImport.suggestedName(for: url)))
-            guard await resolveBeforeChanging(store) else { return }
-            await store.importPreset(result.preset)
-            guard store.failure == nil, !result.skipped.isEmpty else { return }
-            let note = NSAlert()
-            note.messageText = "Imported “\(result.preset.name)”"
-            note.informativeText = "eqtune has no equivalent for \(result.skipped.count == 1 ? "this filter" : "these filters"), so \(result.skipped.count == 1 ? "it was" : "they were") left out: \(ListFormatter.localizedString(byJoining: result.skipped))."
-            note.runModal()
+            await importPreset(text, named: PresetImport.suggestedName(for: url), store: store)
         } catch {
             store.failure = EqtuneStore.Failure(error)
         }
     }
 
-    /// Explains where headphone corrections come from before asking for the file.
-    static func importHeadphoneCorrection(store: EqtuneStore) async {
-        let alert = NSAlert()
-        alert.messageText = "Import a headphone correction"
-        alert.informativeText = """
-            AutoEq has measured corrections for thousands of headphones and earbuds. \
-            They flatten each model's quirks, so music sounds the way it was mixed.
-
-            1. On autoeq.app, pick your headphones.
-            2. Choose the “Equalizer APO” parametric EQ and download it.
-            3. Import the downloaded file here.
-            """
-        alert.addButton(withTitle: "Choose File…")
-        alert.addButton(withTitle: "Open autoeq.app")
-        alert.addButton(withTitle: "Cancel")
-        NSApp.activate()
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: await importPreset(store: store)
-        case .alertSecondButtonReturn: NSWorkspace.shared.open(Links.autoEQ)
-        default: break
+    /// Imports a preset file's text under a free name like `name`, and says which filters it
+    /// couldn't use. Returns the new preset's name, or nil if nothing was imported.
+    @discardableResult
+    static func importPreset(_ text: String, named name: String, store: EqtuneStore) async -> String? {
+        do {
+            let result = try PresetImport.read(text, name: store.availableName(name))
+            guard await resolveBeforeChanging(store) else { return nil }
+            await store.importPreset(result.preset)
+            guard store.failure == nil else { return nil }
+            if !result.skipped.isEmpty {
+                let note = NSAlert()
+                note.messageText = "Imported “\(result.preset.name)”"
+                note.informativeText = "eqtune has no equivalent for \(result.skipped.count == 1 ? "this filter" : "these filters"), so \(result.skipped.count == 1 ? "it was" : "they were") left out: \(ListFormatter.localizedString(byJoining: result.skipped))."
+                note.runModal()
+            }
+            return result.preset.name
+        } catch {
+            store.failure = EqtuneStore.Failure(error)
+            return nil
         }
     }
 
@@ -187,7 +178,6 @@ enum Links {
     static let repository = URL(string: "https://github.com/immdipu/oomph")!
     static let issues = URL(string: "https://github.com/immdipu/oomph/issues/new/choose")!
     static let eqtune = URL(string: "https://github.com/y7nieSEl5/eqtune")!
-    static let autoEQ = URL(string: "https://autoeq.app")!
 }
 
 // MARK: - Naming presets

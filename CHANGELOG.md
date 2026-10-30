@@ -22,6 +22,9 @@ All notable changes to Oomph are documented here. The format follows
 - **A preset per output device**, from the menu or Settings › Devices.
 - **Headroom check** that warns when boosts would distort loud audio, with a one-click fix.
 - **Headphone correction import** from AutoEq / Equalizer APO parametric EQ files.
+- **Find Your Headphones**: search AutoEq's 8,850 measured corrections for headphones and
+  earbuds from the equalizer's **+** menu and add one as a preset, optionally for the
+  current output. The list is downloaded at most once a day and kept for offline use.
 - **Undo and redo** for band and preamp changes.
 - **Reset**: put a preset back to its original state from the equalizer, the menu bar or its
   right-click menu: a Sound Library or eqtune preset to the tuning it shipped with, one of

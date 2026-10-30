@@ -7,6 +7,7 @@ struct PresetSidebar: View {
     @Environment(AudioOutputs.self) private var outputs
     @State private var nameRequest: NameRequest?
     @State private var pendingDelete: String?
+    @State private var findingHeadphones = false
     /// Library presets being added: their rows show progress, and another click on one is
     /// ignored instead of adding it twice.
     @State private var adding: Set<String> = []
@@ -42,6 +43,7 @@ struct PresetSidebar: View {
         .disabled(store.status == nil)
         .safeAreaInset(edge: .bottom) { bottomBar }
         .namePrompt($nameRequest)
+        .sheet(isPresented: $findingHeadphones) { HeadphoneSearch() }
         .confirmationDialog("Delete “\(pendingDelete.map(displayName) ?? "")”?",
                             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                             presenting: pendingDelete) { name in
@@ -151,8 +153,8 @@ struct PresetSidebar: View {
                     }
                 }
                 Divider()
+                Button("Find Your Headphones…") { findingHeadphones = true }
                 Button("Import Preset File…") { Task { await Dialogs.importPreset(store: store) } }
-                Button("Import Headphone Correction…") { Task { await Dialogs.importHeadphoneCorrection(store: store) } }
             } label: {
                 Label("Add Preset", systemImage: "plus")
             }
