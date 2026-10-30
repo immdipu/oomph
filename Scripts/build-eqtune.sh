@@ -9,13 +9,17 @@ CARGO_OUT="$PROJECT_TEMP_DIR/eqtune-cargo"
 HELPERS="$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers"
 LICENSES="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Licenses"
 
-# rustup installs cargo in ~/.cargo/bin, which isn't on Xcode's PATH.
-PLAIN_PATH="${CARGO_HOME:-$HOME/.cargo}/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# rustup installs cargo in ~/.cargo/bin, which isn't on Xcode's PATH, and Homebrew's rustup
+# is keg-only, so its cargo isn't in /opt/homebrew/bin either.
+PLAIN_PATH="${CARGO_HOME:-$HOME/.cargo}/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-if ! PATH="$PLAIN_PATH" command -v cargo >/dev/null 2>&1; then
+# A cargo on the caller's PATH comes first: xcodebuild run from a shell, as on CI, whose
+# macOS runners keep rustup outside all of the places above.
+CARGO=$(command -v cargo || PATH="$PLAIN_PATH" command -v cargo) || {
 	echo "error: cargo not found. Oomph builds its audio engine (eqtune) from source: install Rust from https://rustup.rs, then build again."
 	exit 1
-fi
+}
+PLAIN_PATH="$(dirname "$CARGO"):$PLAIN_PATH"
 if [ ! -f "$SRC/Cargo.toml" ]; then
 	echo "error: Vendor/eqtune is empty. Run: git submodule update --init"
 	exit 1
