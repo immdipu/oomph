@@ -16,21 +16,6 @@ struct GraphScale {
     func y(_ db: Double) -> CGFloat { size.height / 2 * CGFloat(1 - db / range) }
     func db(_ y: CGFloat) -> Double { (1 - Double(y / max(size.height / 2, 1))) * range }
 
-    /// The summed curve as a line, or as an area down to 0 dB.
-    func curve(_ bands: [Band], sampleRate: Double, filled: Bool) -> Path {
-        // Biquads only describe frequencies below Nyquist; at low output rates the curve ends early.
-        let frequencies = stride(from: 0, through: size.width, by: 2).map(hz).filter { $0 < sampleRate / 2 }
-        let points = zip(frequencies, bands.curve(at: frequencies, sampleRate: sampleRate)).map { hz, db in
-            CGPoint(x: x(hz), y: y(db.clamped(to: -range...range)))
-        }
-        guard let first = points.first, let last = points.last else { return Path() }
-        var path = Path()
-        // addLines starts a new subpath, so the 0 dB ends go in the same call.
-        path.addLines(filled ? [CGPoint(x: first.x, y: y(0))] + points + [CGPoint(x: last.x, y: y(0))] : points)
-        if filled { path.closeSubpath() }
-        return path
-    }
-
     /// Where a band's point sits: on its own curve at its frequency. That's the full gain
     /// for a peak, and half of it for a shelf, whose corner is halfway up its slope.
     func nodeY(_ band: Band) -> CGFloat {
@@ -41,6 +26,61 @@ struct GraphScale {
     func gain(forNodeAt y: CGFloat, kind: BandKind) -> Double {
         let level = db(y).clamped(to: -range...range)
         return ((kind == .peaking ? level : level * 2).clamped(to: Limits.db) * 10).rounded() / 10
+    }
+}
+
+/// A curve as heights from -1 (the graph's bottom) to 1 (its top) at frequencies spread
+/// evenly across the graph. As a vector, it lets SwiftUI morph one curve into another.
+struct CurveLevels: VectorArithmetic {
+    /// 20 Hz to 20 kHz, log-spaced: about one per 2 points across a wide graph.
+    static let frequencies = (0..<600).map { 20 * pow(1000, Double($0) / 599) }
+
+    var values: [Double]
+
+    /// `bands`' curve on a ±`range` dB scale. Biquads only describe frequencies below
+    /// Nyquist, so at low output rates the curve ends early.
+    init(_ bands: [Band], sampleRate: Double, range: Double) {
+        let frequencies = Self.frequencies.filter { $0 < sampleRate / 2 }
+        values = bands.curve(at: frequencies, sampleRate: sampleRate).map { ($0 / range).clamped(to: -1...1) }
+    }
+
+    private init(values: [Double]) { self.values = values }
+
+    static var zero: CurveLevels { CurveLevels(values: []) }
+    static func + (lhs: CurveLevels, rhs: CurveLevels) -> CurveLevels { combine(lhs, rhs, +) }
+    static func - (lhs: CurveLevels, rhs: CurveLevels) -> CurveLevels { combine(lhs, rhs, -) }
+    mutating func scale(by rhs: Double) { values = values.map { $0 * rhs } }
+    var magnitudeSquared: Double { values.reduce(0) { $0 + $1 * $1 } }
+
+    /// Value by value; `zero` is empty, so a missing value counts as 0.
+    private static func combine(_ lhs: CurveLevels, _ rhs: CurveLevels, _ op: (Double, Double) -> Double) -> CurveLevels {
+        CurveLevels(values: (0..<max(lhs.values.count, rhs.values.count)).map { index in
+            op(index < lhs.values.count ? lhs.values[index] : 0, index < rhs.values.count ? rhs.values[index] : 0)
+        })
+    }
+}
+
+/// A curve as a line, or as the area between it and 0 dB.
+struct CurveShape: Shape {
+    var levels: CurveLevels
+    var filled = false
+
+    var animatableData: CurveLevels {
+        get { levels }
+        set { levels = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let step = rect.width / CGFloat(CurveLevels.frequencies.count - 1)
+        let points = levels.values.enumerated().map { index, level in
+            CGPoint(x: rect.minX + CGFloat(index) * step, y: rect.midY - rect.height / 2 * CGFloat(level))
+        }
+        guard let first = points.first, let last = points.last else { return Path() }
+        var path = Path()
+        // addLines starts a new subpath, so the 0 dB ends go in the same call.
+        path.addLines(filled ? [CGPoint(x: first.x, y: rect.midY)] + points + [CGPoint(x: last.x, y: rect.midY)] : points)
+        if filled { path.closeSubpath() }
+        return path
     }
 }
 
@@ -84,6 +124,27 @@ struct EQCurveView: View {
                                             3000, 4000, 6000, 7000, 8000, 9000]
 
     var body: some View {
+        let levels = CurveLevels(bands, sampleRate: sampleRate, range: range)
+        ZStack {
+            axes
+            if let highlight {
+                let own = CurveLevels([highlight.band], sampleRate: sampleRate, range: range)
+                CurveShape(levels: own, filled: true).fill(highlight.color.opacity(0.18))
+                CurveShape(levels: own).stroke(highlight.color.opacity(0.8), lineWidth: 1)
+            }
+            CurveShape(levels: levels, filled: true)
+                .fill(LinearGradient(colors: [.oomphOrange.opacity(0.22), .oomphPink.opacity(0.22)],
+                                     startPoint: .leading, endPoint: .trailing))
+            CurveShape(levels: levels)
+                .stroke(LinearGradient.oomph, style: StrokeStyle(lineWidth: detailed ? 2.5 : 1.75, lineCap: .round, lineJoin: .round))
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Frequency response")
+        .accessibilityValue(Self.summary(bands))
+    }
+
+    /// The grid and its labels; the curves are shapes on top, so they can animate.
+    private var axes: some View {
         Canvas { context, size in
             let scale = GraphScale(size: size, range: range)
             let grid = Color.secondary.opacity(0.18)
@@ -119,25 +180,7 @@ struct EQCurveView: View {
                                  at: CGPoint(x: 4, y: y - 2), anchor: .bottomLeading)
                 }
             }
-
-            if let highlight {
-                let own = scale.curve([highlight.band], sampleRate: sampleRate, filled: true)
-                context.fill(own, with: .color(highlight.color.opacity(0.18)))
-                context.stroke(scale.curve([highlight.band], sampleRate: sampleRate, filled: false),
-                               with: .color(highlight.color.opacity(0.8)), lineWidth: 1)
-            }
-            let gradient = Gradient(colors: [.oomphOrange, .oomphPink])
-            let ends = (CGPoint.zero, CGPoint(x: size.width, y: 0))
-            context.fill(scale.curve(bands, sampleRate: sampleRate, filled: true),
-                         with: .linearGradient(Gradient(colors: gradient.stops.map { $0.color.opacity(0.22) }),
-                                               startPoint: ends.0, endPoint: ends.1))
-            context.stroke(scale.curve(bands, sampleRate: sampleRate, filled: false),
-                           with: .linearGradient(gradient, startPoint: ends.0, endPoint: ends.1),
-                           style: StrokeStyle(lineWidth: detailed ? 2.5 : 1.75, lineCap: .round, lineJoin: .round))
         }
-        .accessibilityElement()
-        .accessibilityLabel("Frequency response")
-        .accessibilityValue(Self.summary(bands))
     }
 
     /// The curve in words for VoiceOver: the biggest boost and cut.

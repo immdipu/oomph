@@ -7,12 +7,16 @@ struct PresetSidebar: View {
     @Environment(AudioOutputs.self) private var outputs
     @State private var nameRequest: NameRequest?
     @State private var pendingDelete: String?
+    /// The preset just clicked, shown as selected until eqtune has switched to it or
+    /// refused. A switch takes eqtune about half a second; without this the list jumps
+    /// back to the old preset meanwhile.
+    @State private var picked: String?
+    /// Library presets being added: their rows show progress, and another click on one is
+    /// ignored instead of adding it twice.
+    @State private var adding: Set<String> = []
 
     var body: some View {
-        List(selection: Binding(get: { store.status?.preset }, set: { name in
-            guard let name, name != store.status?.preset else { return }
-            Task { await store.selectPreset(name) }
-        })) {
+        List(selection: Binding(get: { picked ?? store.status?.preset }, set: { if let name = $0 { pick(name) } })) {
             Section("My Presets") {
                 ForEach(store.presets, id: \.self) { name in
                     row(name)
@@ -25,8 +29,11 @@ struct PresetSidebar: View {
                 if !items.isEmpty {
                     Section(category.rawValue) {
                         ForEach(items) { item in
-                            Button { Task { await Dialogs.use(item, store: store) } } label: { libraryRow(item) }
+                            Button { add(item) } label: { libraryRow(item) }
                                 .buttonStyle(.plain)
+                                // ForEach tags rows with their ids; arrowing onto one would ask eqtune
+                                // to switch to a preset it doesn't have yet.
+                                .selectionDisabled()
                                 .help("Add “\(item.title)” to your presets and switch to it")
                         }
                     }
@@ -34,6 +41,8 @@ struct PresetSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        .animation(.oomph, value: store.presets)
+        .animation(.oomph, value: store.status?.dirtyPresets)
         .disabled(store.status == nil)
         .safeAreaInset(edge: .bottom) { bottomBar }
         .namePrompt($nameRequest)
@@ -48,14 +57,36 @@ struct PresetSidebar: View {
         }
     }
 
+    /// Switches to `name`, keeping it selected while eqtune switches. Picks made meanwhile
+    /// (arrow keys, quick clicks) only change the target, so eqtune goes straight to the
+    /// last one instead of through every preset passed on the way.
+    private func pick(_ name: String) {
+        guard name != (picked ?? store.status?.preset) else { return }
+        let switching = picked != nil
+        picked = name
+        guard !switching else { return }
+        Task {
+            while let target = picked, target != store.status?.preset {
+                await store.selectPreset(target)
+                // eqtune refused it: stop, unless something else was picked meanwhile.
+                if store.status?.preset != target, picked == target { break }
+            }
+            picked = nil
+        }
+    }
+
+    private func add(_ item: LibraryPreset) {
+        guard adding.insert(item.id).inserted else { return }
+        Task {
+            await Dialogs.use(item, store: store)
+            adding.remove(item.id)
+        }
+    }
+
     private func row(_ name: String) -> some View {
         let devices = outputs.devices.filter { store.devicePresets[$0.id] == name }
-        return HStack(spacing: 8) {
-            Image(systemName: SoundLibrary.preset(name)?.symbol ?? "slider.horizontal.3")
-                .foregroundStyle(.secondary)
-                .frame(width: 18)
-            Text(displayName(name))
-                .lineLimit(1)
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            label(name, icon: .secondary)
             Spacer(minLength: 4)
             if let device = devices.first {
                 Image(systemName: device.symbol)
@@ -71,20 +102,30 @@ struct PresetSidebar: View {
     }
 
     private func libraryRow(_ item: LibraryPreset) -> some View {
+        HStack(spacing: 4) {
+            label(item.id, icon: LinearGradient.oomph)
+            Spacer(minLength: 0)
+            if adding.contains(item.id) { ProgressView().controlSize(.small) }
+        }
+        .contentShape(Rectangle())
+    }
+
+    /// A preset's icon, name and what it sounds like. A library preset keeps saying so after
+    /// it's added.
+    private func label(_ name: String, icon: some ShapeStyle) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: item.symbol)
-                .foregroundStyle(LinearGradient.oomph)
+            Image(systemName: SoundLibrary.preset(name)?.symbol ?? "slider.horizontal.3")
+                .foregroundStyle(icon)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.title)
-                Text(item.summary)
+                Text(displayName(name))
+                    .lineLimit(1)
+                Text(presetSummary(name))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
-            Spacer(minLength: 0)
         }
-        .contentShape(Rectangle())
         .padding(.vertical, 2)
     }
 
@@ -145,12 +186,14 @@ struct PresetSidebar: View {
             .menuIndicator(.hidden)
             .fixedSize()
             .help("New preset, or import one")
+            .disabled(store.status == nil || store.isBusy)
             Spacer()
+            // Here rather than in the toolbar, where its slot would sit in a button's glass.
+            BusyIndicator(isBusy: store.isBusy)
         }
         .padding(10)
         .background(.bar)
         .overlay(alignment: .top) { Divider() }
-        .disabled(store.status == nil || store.isBusy)
     }
 
     /// eqtune changes presets only without unsaved edits; asks to resolve them first.

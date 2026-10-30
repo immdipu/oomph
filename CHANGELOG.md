@@ -37,6 +37,20 @@ All notable changes to Oomph are documented here. The format follows
 - The Xcode project, folders and scheme are now named Oomph (previously EQTuneBar).
 - Turning the EQ off with unsaved edits now offers Save, Discard or Cancel.
 - The app uses the icon's coral as its accent color.
+- The equalizer animates its changes: switching presets morphs the curve into the new one,
+  and selecting a band, changing the scale or showing a banner no longer jumps the layout.
+  Every preset in the sidebar says what it sounds like, eqtune's own included, and Sound
+  Library presets keep their description after they're added.
+- The equalizer's toolbar buttons have more room around their titles, and Hold to Compare
+  is a button like them rather than a box inside one.
+
+### Fixed
+
+- The sidebar no longer jumps back to the previous preset while eqtune switches, and quick
+  clicks or arrow keys go straight to the last preset picked.
+- The EQ switch in the menu bar and the equalizer, and the switches in Settings › Engine, no
+  longer flip back for a moment while eqtune applies the change.
+- Clicking a Sound Library preset twice no longer tries to add it twice.
 
 ## [1.0] - 2026-10-29
 

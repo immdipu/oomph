@@ -66,8 +66,8 @@ struct MenuView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if store.isBusy { ProgressView().controlSize(.small) }
-                Toggle("Equalizer", isOn: Binding(get: { status.isOn }, set: { on in Task { await toggle(on) } }))
+                BusyIndicator(isBusy: store.isBusy)
+                EqtuneToggle(isOn: status.isOn, change: { await toggle($0) }) { _ in Text("Equalizer") }
                     .toggleStyle(.switch)
                     .labelsHidden()
                     .disabled(store.isBusy)
@@ -97,6 +97,7 @@ struct MenuView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .opacity(status.isOn && !status.bypass ? 1 : 0.45)
                 .overlay { if preset == nil { ProgressView().controlSize(.small) } }
+                .animation(.oomph, value: preset?.bands)
             ForEach(Tone.allCases, id: \.self) { tone in
                 toneSlider(tone, preset: preset)
             }

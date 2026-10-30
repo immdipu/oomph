@@ -13,6 +13,12 @@ extension LinearGradient {
     static let oomph = LinearGradient(colors: [.oomphOrange, .oomphPink], startPoint: .leading, endPoint: .trailing)
 }
 
+extension Animation {
+    /// How things move when eqtune's answer changes the window: quick enough to follow,
+    /// slow enough to see what changed.
+    static let oomph = Animation.smooth(duration: 0.35)
+}
+
 /// One color per band, in frequency order, shared by the graph and the band list.
 enum BandColors {
     private static let palette: [Color] = [.orange, .pink, .purple, .blue, .cyan, .green, .yellow, .red, .indigo, .mint, .teal]
@@ -59,6 +65,20 @@ enum Format {
 func displayName(_ preset: String) -> String {
     SoundLibrary.preset(preset)?.title ?? preset
 }
+
+/// What a preset sounds like, in a line: the library's own words, eqtune's presets as they
+/// ship, or, for one the user made, that it's theirs.
+func presetSummary(_ preset: String) -> String {
+    SoundLibrary.preset(preset)?.summary ?? shippedSummaries[preset] ?? "Your own tuning."
+}
+
+/// eqtune's own presets (`EqtuneStore.shippedPresets`), from their curves in Vendor/eqtune's
+/// config.rs with the preamp applied.
+private let shippedSummaries = [
+    "bright": "Big, punchy bass with crisp, lifted highs.",
+    "mellow": "Easy, laid-back sound with the harsh mids pulled well back.",
+    "pro": "A studio-style curve that cuts boominess deep at 125 Hz.",
+]
 
 // MARK: - Building blocks
 
@@ -123,6 +143,48 @@ struct FailureBanner: View {
     }
 }
 
+/// A switch for a setting eqtune owns. It keeps the new position while eqtune applies it
+/// (about half a second) instead of flipping back until eqtune's answer arrives.
+struct EqtuneToggle<Label: View>: View {
+    let isOn: Bool
+    let change: @MainActor (Bool) async -> Void
+    @ViewBuilder let label: (_ isOn: Bool) -> Label
+    @State private var pending: Bool?
+    @State private var flips = 0
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { pending ?? isOn }, set: { on in
+            pending = on
+            flips += 1
+            let flip = flips
+            Task {
+                await change(on)
+                if flips == flip { pending = nil } // flipped again meanwhile: that one settles it
+            }
+        })) {
+            label(pending ?? isOn)
+        }
+    }
+}
+
+/// A small spinner while a command runs. Most commands finish before it shows, so it
+/// doesn't flash on every click, and it keeps its place so the controls beside it don't move.
+struct BusyIndicator: View {
+    let isBusy: Bool
+    @State private var shown = false
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .opacity(shown ? 1 : 0)
+            .accessibilityHidden(!shown)
+            .task(id: isBusy) {
+                if isBusy, (try? await Task.sleep(for: .milliseconds(600))) == nil { return }
+                withAnimation(.oomph) { shown = isBusy }
+            }
+    }
+}
+
 /// What the EQ is doing right now, as a colored dot and a few words.
 struct StatusLine: View {
     let status: EqtuneStatus
@@ -160,17 +222,42 @@ struct StatusLine: View {
 /// Press and hold to hear the Mac without the EQ; let go to hear it again. Switching back
 /// and forth quickly is the surest way to hear whether a change is actually better.
 struct HoldToCompareButton: View {
+    /// In the window's toolbar: as wide as its title rather than its row.
+    var inToolbar = false
     @Environment(EqtuneStore.self) private var store
     @State private var holding = false
 
+    /// From macOS 26 the toolbar puts each item in glass, which is this button's shape there.
+    private var drawsShape: Bool {
+        guard inToolbar else { return true }
+        if #available(macOS 26, *) { return false }
+        return true
+    }
+
+    /// Matches the buttons around it: capsules from macOS 26, rounded rectangles before.
+    private var shape: AnyShape {
+        if #available(macOS 26, *) { AnyShape(Capsule()) } else { AnyShape(RoundedRectangle(cornerRadius: 6)) }
+    }
+
     var body: some View {
-        Label(holding ? "Original" : "Hold to Compare", systemImage: holding ? "ear.fill" : "ear")
+        Label {
+            // As wide as the longer title, so the button keeps its size while held.
+            Text("Hold to Compare").hidden().overlay { Text(holding ? "Original" : "Hold to Compare") }
+        } icon: {
+            Image(systemName: holding ? "ear.fill" : "ear")
+        }
             .labelStyle(.titleAndIcon)
-            .frame(maxWidth: .infinity)
+            // Glass has no fill to tint, so there the label shows the hold.
+            .foregroundStyle(holding && !drawsShape ? AnyShapeStyle(LinearGradient.oomph) : AnyShapeStyle(.primary))
+            .frame(maxWidth: inToolbar ? nil : .infinity)
             .padding(.vertical, 5)
             .padding(.horizontal, 10)
-            .background(holding ? AnyShapeStyle(LinearGradient.oomph.opacity(0.35)) : AnyShapeStyle(.quaternary),
-                        in: RoundedRectangle(cornerRadius: 6))
+            .background {
+                if drawsShape {
+                    shape.fill(holding ? AnyShapeStyle(LinearGradient.oomph.opacity(0.35)) : AnyShapeStyle(.quaternary))
+                }
+            }
+            .animation(.smooth(duration: 0.15), value: holding)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in
