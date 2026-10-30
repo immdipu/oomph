@@ -112,6 +112,8 @@ Oomph picks its binary in this order: the bundled engine, the path set in Settin
 
 ## Licenses
 
+Oomph is released under the [MIT License](LICENSE).
+
 eqtune is © its authors and licensed under MIT or Apache-2.0. Oomph doesn't copy its code: it
 builds it from the `Vendor/eqtune` git submodule, and the app bundle includes both license
 texts in `Contents/Resources/Licenses`.
