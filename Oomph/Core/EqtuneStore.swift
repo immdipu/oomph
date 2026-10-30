@@ -392,6 +392,22 @@ final class EqtuneStore {
         history[name] = nil
     }
 
+    /// Puts a library preset back to Oomph's tuning and saves it. eqtune's `reset` knows only
+    /// its own presets, so this edits the bands like a person would: unsaved edits to other
+    /// presets are left alone.
+    func resetLibraryPreset(_ item: LibraryPreset) async {
+        let error = await mutate {
+            if self.status?.preset != item.id { _ = try await self.client.run(["preset", "--", item.id]) }
+            let current = try await self.exportedPreset(item.id)
+            for args in Self.commands(from: current, to: item.preset) {
+                _ = try await self.client.run(args)
+            }
+            _ = try await self.client.run(["preset-save", "--", item.id])
+        }
+        if let error { failure = Failure(error) }
+        history[item.id] = nil
+    }
+
     // MARK: - Output devices
 
     /// Remembers `preset` for an output device (nil forgets it).

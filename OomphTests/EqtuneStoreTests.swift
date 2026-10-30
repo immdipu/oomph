@@ -160,6 +160,21 @@ struct EqtuneStoreTests {
         #expect(!FileManager.default.fileExists(atPath: call[2]))
     }
 
+    /// eqtune can't reset Oomph's library presets, so the store sends their bands and saves.
+    @Test func resettingALibraryPresetRestoresItsTuningAndSaves() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        let item = try #require(SoundLibrary.preset("bass-boost"))
+        await store.resetLibraryPreset(item)
+        let sent = await edits(client)
+        #expect(sent.first == ["preset", "--", "bass-boost"])
+        #expect(sent.last == ["preset-save", "--", "bass-boost"])
+        // The mock reports mellow's bands, so all of them go and the library's arrive.
+        let current = try PresetParser.parseExport(#require(await client.outputs["preset-export"]))
+        #expect(Array(sent.dropFirst().dropLast()) == EqtuneStore.commands(from: current, to: item.preset))
+        #expect(sent.contains(["low-shelf", "105.0", "6.0", "0.71"]))
+    }
+
     @Test func outputChangesSwitchToTheDevicesPreset() async {
         let (store, client) = await editorStore()
         defer { store.setVisible(.editor, false) }

@@ -32,6 +32,45 @@ enum Dialogs {
         return !store.hasUnsavedEdits && store.failure == nil
     }
 
+    // MARK: - Going back
+
+    /// Throws away unsaved edits, after asking. eqtune can only discard every preset's edits
+    /// at once (by restarting the EQ), so the question names everything that goes back.
+    static func revert(store: EqtuneStore) async {
+        guard let status = store.status, !status.dirtyPresets.isEmpty else { return }
+        let one = status.dirtyPresets.count == 1
+        let alert = NSAlert()
+        alert.messageText = "Revert to the saved version?"
+        alert.informativeText = "\(list(status.dirtyPresets)) \(one ? "goes" : "go") back to how \(one ? "it was" : "they were") last saved."
+            + (status.isOn ? " The EQ restarts for a moment." : "")
+        alert.addButton(withTitle: "Revert").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        await store.discardAll()
+    }
+
+    /// eqtune's own presets and Oomph's library ones have an original tuning to go back to.
+    static func hasOriginal(_ preset: String) -> Bool {
+        EqtuneStore.shippedPresets.contains(preset) || SoundLibrary.preset(preset) != nil
+    }
+
+    /// Puts `preset` back to its original tuning, after asking.
+    static func resetToOriginal(_ preset: String, store: EqtuneStore) async {
+        let alert = NSAlert()
+        alert.messageText = "Reset “\(displayName(preset))” to its original tuning?"
+        alert.informativeText = "Your changes to this preset, saved or not, are replaced by its original version."
+        alert.addButton(withTitle: "Reset").hasDestructiveAction = true
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        if let item = SoundLibrary.preset(preset) {
+            await store.resetLibraryPreset(item)
+        } else if await resolveBeforeChanging(store) { // eqtune's `reset` refuses while edits are unsaved
+            await store.resetPreset(preset)
+        }
+    }
+
     /// Picks a library preset: a switch if eqtune has it already, otherwise an import.
     static func use(_ item: LibraryPreset, store: EqtuneStore) async {
         if store.presets.contains(item.id) {

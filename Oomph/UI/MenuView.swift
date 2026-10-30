@@ -186,6 +186,10 @@ struct MenuView: View {
                     Text("“\(displayName(status.preset))” has unsaved changes.")
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button("Revert") { Task { await Dialogs.revert(store: store) } }
+                        .controlSize(.small)
+                        .disabled(store.isBusy)
+                        .help("Go back to how “\(displayName(status.preset))” was last saved")
                     Button("Save") { Task { await store.savePreset(as: status.preset) } }
                         .controlSize(.small)
                         .disabled(store.isBusy)
