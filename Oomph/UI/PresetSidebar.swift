@@ -7,7 +7,6 @@ struct PresetSidebar: View {
     @Environment(AudioOutputs.self) private var outputs
     @State private var nameRequest: NameRequest?
     @State private var pendingDelete: String?
-    @State private var pendingReset: String?
 
     var body: some View {
         List(selection: Binding(get: { store.status?.preset }, set: { name in
@@ -44,15 +43,8 @@ struct PresetSidebar: View {
             Button("Delete", role: .destructive) { whenClean { await store.deletePreset(name) } }
         } message: { name in
             Text(EqtuneStore.shippedPresets.contains(name)
-                 ? "It’s one of eqtune’s own presets; Reset to Original brings it back."
+                 ? "It’s one of eqtune’s own presets; Reset to Original Tuning brings it back."
                  : "This can’t be undone. Export it first if you might want it again.")
-        }
-        .confirmationDialog("Reset “\(pendingReset ?? "")” to its original tuning?",
-                            isPresented: Binding(get: { pendingReset != nil }, set: { if !$0 { pendingReset = nil } }),
-                            presenting: pendingReset) { name in
-            Button("Reset", role: .destructive) { whenClean { await store.resetPreset(name) } }
-        } message: { _ in
-            Text("Your changes to this preset are replaced by eqtune’s original version.")
         }
     }
 
@@ -97,8 +89,11 @@ struct PresetSidebar: View {
     }
 
     @ViewBuilder private func menu(for name: String) -> some View {
-        if store.status?.dirtyPresets.contains(name) == true, name == store.status?.preset {
-            Button("Save Changes") { Task { await store.savePreset(as: name) } }
+        if store.status?.dirtyPresets.contains(name) == true {
+            if name == store.status?.preset {
+                Button("Save Changes") { Task { await store.savePreset(as: name) } }
+            }
+            Button("Revert to Saved Version…") { Task { await Dialogs.revert(store: store) } }
             Divider()
         }
         Button("Duplicate…") {
@@ -123,8 +118,8 @@ struct PresetSidebar: View {
                                                           set: { store.setDevicePreset($0 ? name : nil, for: device.id) }))
         }
         Divider()
-        if EqtuneStore.shippedPresets.contains(name) {
-            Button("Reset to Original…") { pendingReset = name }
+        if Dialogs.hasOriginal(name) {
+            Button("Reset to Original Tuning…") { Task { await Dialogs.resetToOriginal(name, store: store) } }
         }
         Button("Delete…", role: .destructive) { pendingDelete = name }
             .disabled(store.presets.count < 2)

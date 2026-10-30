@@ -56,7 +56,6 @@ private struct PresetEditor: View {
     /// The graph's ±dB scale: nil picks 12 or 24 to fit the curve.
     @State private var wideScale: Bool?
     @State private var nameRequest: NameRequest?
-    @State private var confirmRevert = false
 
     private var shown: [Band] { preset.bands.map { drafts[$0.hz] ?? $0 } }
     private var sampleRate: Double { status.outputRateHz ?? 48_000 }
@@ -131,14 +130,6 @@ private struct PresetEditor: View {
         .navigationSubtitle(status.activeIsDirty ? "Edited" : "Saved")
         .toolbar { toolbar }
         .namePrompt($nameRequest)
-        .confirmationDialog("Revert unsaved changes?", isPresented: $confirmRevert) {
-            Button("Revert", role: .destructive) { Task { await store.discardAll() } }
-        } message: {
-            let others = status.dirtyPresets.filter { $0 != status.preset }
-            Text(others.isEmpty
-                 ? "“\(displayName(preset.name))” goes back to how it was last saved."
-                 : "Unsaved changes to \(ListFormatter.localizedString(byJoining: others.map(displayName))) are reverted too. The EQ restarts for a moment.")
-        }
         .onChange(of: preset.name) {
             pending.values.forEach { $0.cancel() }
             pending = [:]
@@ -163,9 +154,14 @@ private struct PresetEditor: View {
         }
         ToolbarItemGroup(placement: .primaryAction) {
             if store.isBusy { ProgressView().controlSize(.small) }
-            Button("Revert") { confirmRevert = true }
-                .disabled(!status.activeIsDirty || store.isBusy)
-                .help("Go back to the last saved version")
+            Menu("Revert") {
+                Button("Revert to Saved Version…") { Task { await Dialogs.revert(store: store) } }
+                    .disabled(!status.activeIsDirty)
+                Button("Reset to Original Tuning…") { Task { await Dialogs.resetToOriginal(preset.name, store: store) } }
+                    .disabled(!Dialogs.hasOriginal(preset.name))
+            }
+            .disabled(store.isBusy || !(status.activeIsDirty || Dialogs.hasOriginal(preset.name)))
+            .help("Go back to the last saved version, or to the preset’s original tuning")
             Button("Save") { Task { await store.savePreset(as: preset.name) } }
                 .disabled(!status.activeIsDirty || store.isBusy)
                 .keyboardShortcut("s")
