@@ -1,0 +1,11 @@
+bright · preamp -8.0 dB
+     32 Hz   +7.5 dB  Q1.41
+     64 Hz   +9.0 dB  Q1.41
+    125 Hz  +11.0 dB  Q1.41
+    250 Hz   +7.5 dB  Q1.41
+    500 Hz   +4.0 dB  Q1.41
+     1 kHz   +4.5 dB  Q1.41
+     2 kHz   +7.5 dB  Q1.41
+     4 kHz   +7.5 dB  Q1.41
+     8 kHz   +9.5 dB  Q1.41
+    16 kHz   +7.0 dB  Q1.41

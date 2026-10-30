@@ -1,0 +1,18 @@
+intent:        on
+engine:        running
+suspension:    none
+preset:        bass
+preamp:        -9.10631 dB
+bands:         12
+limiter:       true
+output UID:    BuiltInHeadphoneOutputDevice
+output name:   External Headphones
+output rate:   48000 Hz
+output stream: 48000 Hz, 2 ch, Float32, interleaved
+last error:    none
+retry:         idle
+bypass:        off
+dirty presets: none
+low power:     off
+auto-off LPM:  on
+auto-off idle: on

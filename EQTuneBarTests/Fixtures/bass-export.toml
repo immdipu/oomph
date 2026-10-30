@@ -1,0 +1,74 @@
+name = "bass"
+preamp_db = -9.10631
+
+[[bands]]
+kind = "peaking"
+freq = 32.0
+gain_db = 3.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 60.0
+gain_db = 2.0
+q = 1.0
+
+[[bands]]
+kind = "peaking"
+freq = 64.0
+gain_db = 2.0
+q = 1.41
+
+[[bands]]
+kind = "low_shelf"
+freq = 100.0
+gain_db = 5.0
+q = 0.7
+
+[[bands]]
+kind = "peaking"
+freq = 125.0
+gain_db = 1.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 250.0
+gain_db = -2.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 500.0
+gain_db = -3.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 1000.0
+gain_db = -4.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 2000.0
+gain_db = -7.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 4000.0
+gain_db = -1.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 8000.0
+gain_db = 2.0
+q = 1.41
+
+[[bands]]
+kind = "peaking"
+freq = 16000.0
+gain_db = 2.0
+q = 1.41

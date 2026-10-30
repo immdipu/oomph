@@ -1,0 +1,18 @@
+intent:        off
+engine:        stopped
+suspension:    user-off
+preset:        bass
+preamp:        +0 dB
+bands:         12
+limiter:       true
+output UID:    BuiltInHeadphoneOutputDevice
+output name:   External Headphones
+output rate:   48000 Hz
+output stream: 48000 Hz, 2 ch, Float32, interleaved
+last error:    none
+retry:         idle
+bypass:        on
+dirty presets: bass, my-mix.v2
+low power:     on
+auto-off LPM:  off
+auto-off idle: on

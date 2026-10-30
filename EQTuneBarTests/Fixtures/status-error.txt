@@ -1,0 +1,18 @@
+intent:        on
+engine:        stopped
+suspension:    recovering
+preset:        bright
+preamp:        -8 dB
+bands:         10
+limiter:       false
+output UID:    (unavailable)
+output name:   (unavailable)
+output rate:   (unavailable)
+output stream: (unavailable)
+last error:    could not start the audio tap: AudioHardwareCreateProcessTap failed (OSStatus 560947818)
+retry:         scheduled 2/6 in 2s
+bypass:        off
+dirty presets: none
+low power:     off
+auto-off LPM:  on
+auto-off idle: off

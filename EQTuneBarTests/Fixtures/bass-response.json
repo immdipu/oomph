@@ -1,0 +1,130 @@
+{
+  "sample_rate_hz": 48000.0,
+  "preamp_db": -9.10631,
+  "points": [
+    {
+      "frequency_hz": 20.0,
+      "gain_db": -2.6864986
+    },
+    {
+      "frequency_hz": 25.0,
+      "gain_db": -1.52378
+    },
+    {
+      "frequency_hz": 31.5,
+      "gain_db": -0.12632696
+    },
+    {
+      "frequency_hz": 40.0,
+      "gain_db": -0.24073862
+    },
+    {
+      "frequency_hz": 50.0,
+      "gain_db": -0.17960003
+    },
+    {
+      "frequency_hz": 63.0,
+      "gain_db": -0.21545984
+    },
+    {
+      "frequency_hz": 80.0,
+      "gain_db": -2.1981337
+    },
+    {
+      "frequency_hz": 100.0,
+      "gain_db": -4.3455415
+    },
+    {
+      "frequency_hz": 125.0,
+      "gain_db": -6.07661
+    },
+    {
+      "frequency_hz": 160.0,
+      "gain_db": -8.143833
+    },
+    {
+      "frequency_hz": 200.0,
+      "gain_db": -9.937911
+    },
+    {
+      "frequency_hz": 250.0,
+      "gain_db": -11.312707
+    },
+    {
+      "frequency_hz": 315.0,
+      "gain_db": -11.605211
+    },
+    {
+      "frequency_hz": 400.0,
+      "gain_db": -12.348954
+    },
+    {
+      "frequency_hz": 500.0,
+      "gain_db": -13.38149
+    },
+    {
+      "frequency_hz": 630.0,
+      "gain_db": -13.203489
+    },
+    {
+      "frequency_hz": 800.0,
+      "gain_db": -13.834969
+    },
+    {
+      "frequency_hz": 1000.0,
+      "gain_db": -15.057275
+    },
+    {
+      "frequency_hz": 1250.0,
+      "gain_db": -14.757617
+    },
+    {
+      "frequency_hz": 1600.0,
+      "gain_db": -15.640086
+    },
+    {
+      "frequency_hz": 2000.0,
+      "gain_db": -17.06819
+    },
+    {
+      "frequency_hz": 2500.0,
+      "gain_db": -14.704417
+    },
+    {
+      "frequency_hz": 3150.0,
+      "gain_db": -12.398221
+    },
+    {
+      "frequency_hz": 4000.0,
+      "gain_db": -11.231231
+    },
+    {
+      "frequency_hz": 5000.0,
+      "gain_db": -9.988554
+    },
+    {
+      "frequency_hz": 6300.0,
+      "gain_db": -8.591706
+    },
+    {
+      "frequency_hz": 8000.0,
+      "gain_db": -7.373975
+    },
+    {
+      "frequency_hz": 10000.0,
+      "gain_db": -7.8486085
+    },
+    {
+      "frequency_hz": 12500.0,
+      "gain_db": -8.090153
+    },
+    {
+      "frequency_hz": 16000.0,
+      "gain_db": -7.0121355
+    },
+    {
+      "frequency_hz": 20000.0,
+      "gain_db": -8.788537
+    }
+  ]
+}

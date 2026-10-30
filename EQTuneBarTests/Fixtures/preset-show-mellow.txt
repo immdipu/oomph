@@ -1,0 +1,11 @@
+mellow · preamp +0.0 dB
+     32 Hz   +3.0 dB  Q1.41
+     64 Hz   +2.0 dB  Q1.41
+    125 Hz   +1.0 dB  Q1.41
+    250 Hz   -2.0 dB  Q1.41
+    500 Hz   -3.0 dB  Q1.41
+     1 kHz   -4.0 dB  Q1.41
+     2 kHz   -7.0 dB  Q1.41
+     4 kHz   -1.0 dB  Q1.41
+     8 kHz   +2.0 dB  Q1.41
+    16 kHz   +2.0 dB  Q1.41

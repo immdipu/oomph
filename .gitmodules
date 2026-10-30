@@ -1,0 +1,3 @@
+[submodule "Vendor/eqtune"]
+	path = Vendor/eqtune
+	url = https://github.com/y7nieSEl5/eqtune

@@ -1,0 +1,13 @@
+bass · preamp -9.1 dB
+     32 Hz   +3.0 dB  Q1.41
+     60 Hz   +2.0 dB  Q1
+     64 Hz   +2.0 dB  Q1.41
+  low shelf   100 Hz   +5.0 dB  Q0.7
+    125 Hz   +1.0 dB  Q1.41
+    250 Hz   -2.0 dB  Q1.41
+    500 Hz   -3.0 dB  Q1.41
+     1 kHz   -4.0 dB  Q1.41
+     2 kHz   -7.0 dB  Q1.41
+     4 kHz   -1.0 dB  Q1.41
+     8 kHz   +2.0 dB  Q1.41
+    16 kHz   +2.0 dB  Q1.41
