@@ -165,7 +165,7 @@ private struct ShortcutRow: View {
                         .frame(minWidth: 110)
                 }
                 .help(monitor != nil ? "Press the shortcut, or Esc to cancel" : "Click, then press the shortcut")
-                Button { shortcut = nil } label: { Image(systemName: "xmark.circle.fill") }
+                Button { shortcut = nil } label: { Label("Remove Shortcut", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .help("Remove this shortcut")
