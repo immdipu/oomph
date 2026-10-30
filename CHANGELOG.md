@@ -19,10 +19,17 @@ All notable changes to Oomph are documented here. The format follows
   Loudness, Vocal Clarity, Dialogue, Electronic, Hip-Hop, Rock, Acoustic, Classical & Jazz,
   Footsteps and more), each with enough headroom not to clip.
 - **Hold to Compare** in the menu and the equalizer, for quick A/B listening.
-- **A preset per output device**, from the menu or Settings › Devices.
+- **A preset per output device**, from the menu or Settings › Devices. An output can also
+  be set to **No EQ**, which turns the EQ off while it plays and back on for the next
+  output, and **Other outputs** sets one preset for every output without its own.
 - **Headroom check** that warns when boosts would distort loud audio, with a one-click fix.
 - **Headphone correction import** from AutoEq / Equalizer APO parametric EQ files.
+- **Find Your Headphones**: search AutoEq's 8,850 measured corrections for headphones and
+  earbuds from the equalizer's **+** menu and add one as a preset, optionally for the
+  current output. The list is downloaded at most once a day and kept for offline use.
 - **Undo and redo** for band and preamp changes.
+- **Global shortcuts** in Settings › Shortcuts: turn the EQ on or off and step to the next
+  or previous preset from any app, with a brief on-screen confirmation.
 - **Reset**: put a preset back to its original state from the equalizer, the menu bar or its
   right-click menu: a Sound Library or eqtune preset to the tuning it shipped with, one of
   your own to how you last saved it.

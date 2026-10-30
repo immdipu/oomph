@@ -10,6 +10,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             DeviceSettings()
                 .tabItem { Label("Devices", systemImage: "headphones") }
+            ShortcutSettings()
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
             EngineSettings()
                 .tabItem { Label("Engine", systemImage: "waveform") }
             AboutView()
@@ -74,7 +76,8 @@ private struct GeneralSettings: View {
     }
 }
 
-/// A preset per output: headphones get their correction, speakers get theirs.
+/// A preset per output: headphones get their correction, speakers get theirs, and a studio
+/// interface can get no EQ at all.
 private struct DeviceSettings: View {
     @Environment(EqtuneStore.self) private var store
     @Environment(AudioOutputs.self) private var outputs
@@ -86,30 +89,114 @@ private struct DeviceSettings: View {
                     Text("No audio outputs found.").foregroundStyle(.secondary)
                 }
                 ForEach(outputs.devices) { device in
-                    Picker(selection: Binding(get: { store.devicePresets[device.id] ?? "" },
-                                              set: { store.setDevicePreset($0.isEmpty ? nil : $0, for: device.id) })) {
-                        Text("Don’t switch").tag("")
-                        Divider()
-                        ForEach(store.presets, id: \.self) { Text(displayName($0)).tag($0) }
-                    } label: {
-                        Label {
-                            Text(device.name)
-                            if device.id == outputs.current?.id { Text("Current output") }
-                        } icon: {
-                            Image(systemName: device.symbol)
-                        }
+                    picker(for: device.id, unset: store.devicePresets[EqtuneStore.otherOutputs] == nil ? "Don’t switch" : "Same as other outputs") {
+                        Text(device.name)
+                        if device.id == outputs.current?.id { Text("Current output") }
+                    } icon: {
+                        Image(systemName: device.symbol)
                     }
-                    .disabled(store.presets.isEmpty)
+                }
+                picker(for: EqtuneStore.otherOutputs, unset: "Don’t switch") {
+                    Text("Other outputs")
+                    Text("Any output without a choice of its own, including ones you connect later")
+                } icon: {
+                    Image(systemName: "ellipsis.circle")
                 }
             } header: {
                 Text("Preset for each output")
             } footer: {
-                Text("When macOS starts playing through one of these, Oomph switches to its preset. Oomph has to be running for this, so turn on Launch at Login.")
+                Text("When macOS starts playing through one of these, Oomph switches to its preset, or turns the EQ off for No EQ and back on for the next output. Oomph has to be running for this, so turn on Launch at Login.")
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func picker(for key: String, unset: String, @ViewBuilder title: () -> some View,
+                        @ViewBuilder icon: () -> some View) -> some View {
+        Picker(selection: Binding(get: { store.devicePresets[key] ?? "" },
+                                  set: { store.setDevicePreset($0.isEmpty ? nil : $0, for: key) })) {
+            Text(unset).tag("")
+            Text("No EQ").tag(EqtuneStore.noEQ)
+            Divider()
+            ForEach(store.presets, id: \.self) { Text(displayName($0)).tag($0) }
+        } label: {
+            Label(title: title, icon: icon)
+        }
+        .disabled(store.presets.isEmpty)
+    }
+}
+
+/// Global shortcuts, like FxSound's and Peace's: switch the EQ and presets from any app.
+private struct ShortcutSettings: View {
+    var body: some View {
+        Form {
+            Section {
+                ForEach(ShortcutAction.allCases, id: \.self) { ShortcutRow(action: $0) }
+            } header: {
+                Text("Global shortcuts")
+            } footer: {
+                Text("These work in any app while Oomph is running. Click a shortcut, then press the keys, using ⌘, ⌥ or ⌃.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct ShortcutRow: View {
+    let action: ShortcutAction
+    @AppStorage private var shortcut: Shortcut?
+    @State private var monitor: Any?
+
+    init(action: ShortcutAction) {
+        self.action = action
+        _shortcut = AppStorage(action.defaultsKey)
+    }
+
+    var body: some View {
+        LabeledContent(action.title) {
+            HStack(spacing: 4) {
+                Button { monitor == nil ? record() : stop() } label: {
+                    Text(monitor != nil ? "Press keys…" : shortcut?.display ?? "Record Shortcut")
+                        .monospacedDigit()
+                        .frame(minWidth: 110)
+                }
+                .help(monitor != nil ? "Press the shortcut, or Esc to cancel" : "Click, then press the shortcut")
+                Button { shortcut = nil } label: { Label("Remove Shortcut", systemImage: "xmark.circle.fill").labelStyle(.iconOnly) }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Remove this shortcut")
+                    .opacity(shortcut == nil ? 0 : 1)
+                    .disabled(shortcut == nil)
+            }
+        }
+        .onDisappear { stop() }
+    }
+
+    private func record() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // Esc
+                stop()
+            } else if let new = Shortcut(event) {
+                // One shortcut, one action: another action with it would never get the press.
+                for other in ShortcutAction.allCases where UserDefaults.standard.string(forKey: other.defaultsKey) == new.rawValue {
+                    UserDefaults.standard.removeObject(forKey: other.defaultsKey)
+                }
+                shortcut = new
+                stop()
+            } else {
+                NSSound.beep()
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
 

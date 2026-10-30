@@ -39,6 +39,10 @@ final class EqtuneStore {
         }
     }
 
+    /// The `devicePresets` key for outputs without one of their own, and the value that turns
+    /// the EQ off. Neither can be a preset name: eqtune's names have no "*".
+    nonisolated static let otherOutputs = "*other", noEQ = "*off"
+
     /// eqtune's own presets; `eqtune reset` restores them.
     nonisolated static let shippedPresets = ["bright", "mellow", "pro"]
 
@@ -58,8 +62,11 @@ final class EqtuneStore {
     /// screen for one poll rather than blanking every view, but nothing is built on them: the
     /// next command reads again first, and a second slow read in a row counts as unreachable.
     private var readIsStale = false
-    /// Output-device UID → the preset to switch to when macOS starts playing through it.
+    /// Output-device UID → the preset to switch to when macOS starts playing through it, or
+    /// `noEQ`. The `otherOutputs` entry is for outputs without an entry of their own.
     private(set) var devicePresets: [String: String]
+    /// The EQ was turned off for a "No EQ" output, so the next output turns it back on.
+    private var offForOutput = false
 
     private let client: any EqtuneClient
     private let defaults: UserDefaults
@@ -487,17 +494,53 @@ final class EqtuneStore {
         defaults.set(devicePresets, forKey: Self.devicePresetsKey)
     }
 
-    /// macOS switched outputs: switch to the preset chosen for that device, if any. A
-    /// preset that no longer exists is forgotten instead of reported.
+    /// macOS switched outputs: switch to the preset chosen for that device, or for every
+    /// other output, or turn the EQ off for "No EQ". A preset that no longer exists is
+    /// forgotten instead of reported.
     func outputChanged(to uid: String) async {
-        guard let name = devicePresets[uid] else { return }
+        let key = devicePresets[uid] == nil ? Self.otherOutputs : uid
+        if devicePresets[key] == Self.noEQ {
+            await refresh() // nothing polls while Oomph's windows are closed
+            guard status?.isOn == true else { return } // the user's own off stays theirs
+            logger.info("output changed; turning the EQ off for it")
+            // Unsaved edits stop `off` at its prompt once the EQ is off, and stay for the next `on`.
+            _ = await turnOff()
+            offForOutput = true
+            return
+        }
+        if offForOutput {
+            offForOutput = false
+            await setOn(true)
+        }
+        guard let name = devicePresets[key] else { return }
         logger.info("output changed; switching to \(name, privacy: .public)")
         guard let error = await command(["preset", "--", name]) else { return }
         if Failure(error).message.hasPrefix("no such preset") {
-            setDevicePreset(nil, for: uid)
+            setDevicePreset(nil, for: key)
         } else {
             failure = Failure(error)
         }
+    }
+
+    // MARK: - Global shortcuts
+
+    /// Turns the EQ on or off. Shortcuts work while no window polls, so this reads first, and it
+    /// never stops at a question: unsaved edits stay, for the next `on`.
+    func toggleEQ() async {
+        await refresh()
+        guard let status else { return }
+        if status.isOn { _ = await turnOff() } else { await setOn(true) }
+    }
+
+    /// Switches to the preset `offset` places along eqtune's list, wrapping around at either end,
+    /// and returns its name. A press during a switch steps on from the preset on its way.
+    @discardableResult
+    func stepPreset(by offset: Int) async -> String? {
+        if picked == nil { await refresh() }
+        guard let current = picked ?? status?.preset, let index = presets.firstIndex(of: current) else { return nil }
+        let next = presets[((index + offset) % presets.count + presets.count) % presets.count]
+        pick(next)
+        return next
     }
 
     // MARK: - Engine install
