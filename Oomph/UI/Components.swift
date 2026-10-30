@@ -222,17 +222,41 @@ struct StatusLine: View {
 /// Press and hold to hear the Mac without the EQ; let go to hear it again. Switching back
 /// and forth quickly is the surest way to hear whether a change is actually better.
 struct HoldToCompareButton: View {
+    /// In the window's toolbar: as wide as its title rather than its row.
+    var inToolbar = false
     @Environment(EqtuneStore.self) private var store
     @State private var holding = false
 
+    /// From macOS 26 the toolbar puts each item in glass, which is this button's shape there.
+    private var drawsShape: Bool {
+        guard inToolbar else { return true }
+        if #available(macOS 26, *) { return false }
+        return true
+    }
+
+    /// Matches the buttons around it: capsules from macOS 26, rounded rectangles before.
+    private var shape: AnyShape {
+        if #available(macOS 26, *) { AnyShape(Capsule()) } else { AnyShape(RoundedRectangle(cornerRadius: 6)) }
+    }
+
     var body: some View {
-        Label(holding ? "Original" : "Hold to Compare", systemImage: holding ? "ear.fill" : "ear")
+        Label {
+            // As wide as the longer title, so the button keeps its size while held.
+            Text("Hold to Compare").hidden().overlay { Text(holding ? "Original" : "Hold to Compare") }
+        } icon: {
+            Image(systemName: holding ? "ear.fill" : "ear")
+        }
             .labelStyle(.titleAndIcon)
-            .frame(maxWidth: .infinity)
+            // Glass has no fill to tint, so there the label shows the hold.
+            .foregroundStyle(holding && !drawsShape ? AnyShapeStyle(LinearGradient.oomph) : AnyShapeStyle(.primary))
+            .frame(maxWidth: inToolbar ? nil : .infinity)
             .padding(.vertical, 5)
             .padding(.horizontal, 10)
-            .background(holding ? AnyShapeStyle(LinearGradient.oomph.opacity(0.35)) : AnyShapeStyle(.quaternary),
-                        in: RoundedRectangle(cornerRadius: 6))
+            .background {
+                if drawsShape {
+                    shape.fill(holding ? AnyShapeStyle(LinearGradient.oomph.opacity(0.35)) : AnyShapeStyle(.quaternary))
+                }
+            }
             .animation(.smooth(duration: 0.15), value: holding)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)

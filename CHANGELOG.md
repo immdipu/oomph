@@ -41,6 +41,8 @@ All notable changes to Oomph are documented here. The format follows
   and selecting a band, changing the scale or showing a banner no longer jumps the layout.
   Every preset in the sidebar says what it sounds like, eqtune's own included, and Sound
   Library presets keep their description after they're added.
+- The equalizer's toolbar buttons have more room around their titles, and Hold to Compare
+  is a button like them rather than a box inside one.
 
 ### Fixed
 

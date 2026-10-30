@@ -172,26 +172,30 @@ private struct PresetEditor: View {
                 .help("Redo (⇧⌘Z)")
         }
         ToolbarItem {
-            HoldToCompareButton().frame(width: 160)
+            HoldToCompareButton(inToolbar: true)
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu("Revert") {
+            Menu {
                 Button("Revert to Saved Version…") { Task { await Dialogs.revert(store: store) } }
                     .disabled(!status.activeIsDirty)
                 Button("Reset to Original Tuning…") { Task { await Dialogs.resetToOriginal(preset.name, store: store) } }
                     .disabled(!Dialogs.hasOriginal(preset.name))
+            } label: {
+                toolbarTitle("Revert")
             }
             .disabled(store.isBusy || !(status.activeIsDirty || Dialogs.hasOriginal(preset.name)))
             .help("Go back to the last saved version, or to the preset’s original tuning")
-            Button("Save") { Task { await store.savePreset(as: preset.name) } }
+            Button { Task { await store.savePreset(as: preset.name) } } label: { toolbarTitle("Save") }
                 .disabled(!status.activeIsDirty || store.isBusy)
                 .keyboardShortcut("s")
                 .help("Save these changes to “\(displayName(preset.name))” (⌘S)")
-            Button("Save As…") {
+            Button {
                 nameRequest = NameRequest(title: "Save Preset As", action: "Save",
                                           initial: store.availableName("\(preset.name)-copy"), allowActive: true) {
                     await store.savePreset(as: $0)
                 }
+            } label: {
+                toolbarTitle("Save As…")
             }
             .disabled(store.isBusy)
             .keyboardShortcut("s", modifiers: [.command, .shift])
@@ -203,6 +207,11 @@ private struct PresetEditor: View {
             .disabled(store.isBusy)
             .help(status.isOn ? "Turn the EQ off" : "Turn the EQ on")
         }
+    }
+
+    /// A text button's title, with room on both sides inside its toolbar glass.
+    private func toolbarTitle(_ title: String) -> some View {
+        Text(title).padding(.horizontal, 6)
     }
 
     private func toggle(_ on: Bool) async {
