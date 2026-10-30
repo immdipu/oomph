@@ -10,6 +10,8 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             DeviceSettings()
                 .tabItem { Label("Devices", systemImage: "headphones") }
+            ShortcutSettings()
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
             EngineSettings()
                 .tabItem { Label("Engine", systemImage: "waveform") }
             AboutView()
@@ -123,6 +125,78 @@ private struct DeviceSettings: View {
             Label(title: title, icon: icon)
         }
         .disabled(store.presets.isEmpty)
+    }
+}
+
+/// Global shortcuts, like FxSound's and Peace's: switch the EQ and presets from any app.
+private struct ShortcutSettings: View {
+    var body: some View {
+        Form {
+            Section {
+                ForEach(ShortcutAction.allCases, id: \.self) { ShortcutRow(action: $0) }
+            } header: {
+                Text("Global shortcuts")
+            } footer: {
+                Text("These work in any app while Oomph is running. Click a shortcut, then press the keys, using ⌘, ⌥ or ⌃.")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct ShortcutRow: View {
+    let action: ShortcutAction
+    @AppStorage private var shortcut: Shortcut?
+    @State private var monitor: Any?
+
+    init(action: ShortcutAction) {
+        self.action = action
+        _shortcut = AppStorage(action.defaultsKey)
+    }
+
+    var body: some View {
+        LabeledContent(action.title) {
+            HStack(spacing: 4) {
+                Button { monitor == nil ? record() : stop() } label: {
+                    Text(monitor != nil ? "Press keys…" : shortcut?.display ?? "Record Shortcut")
+                        .monospacedDigit()
+                        .frame(minWidth: 110)
+                }
+                .help(monitor != nil ? "Press the shortcut, or Esc to cancel" : "Click, then press the shortcut")
+                Button { shortcut = nil } label: { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Remove this shortcut")
+                    .opacity(shortcut == nil ? 0 : 1)
+                    .disabled(shortcut == nil)
+            }
+        }
+        .onDisappear { stop() }
+    }
+
+    private func record() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { // Esc
+                stop()
+            } else if let new = Shortcut(event) {
+                // One shortcut, one action: another action with it would never get the press.
+                for other in ShortcutAction.allCases where UserDefaults.standard.string(forKey: other.defaultsKey) == new.rawValue {
+                    UserDefaults.standard.removeObject(forKey: other.defaultsKey)
+                }
+                shortcut = new
+                stop()
+            } else {
+                NSSound.beep()
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
     }
 }
 

@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     let store = EqtuneStore(client: ProcessEqtuneClient())
     let outputs = AudioOutputs()
+    private let hotKeys = HotKeys()
     private var onboardingWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,6 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         outputs.onChange = { [store] device in
             Task { await store.outputChanged(to: device.id) }
+        }
+        hotKeys.onPress = { [weak self] action in
+            Task { await self?.perform(action) }
+        }
+        hotKeys.reload()
+        // Settings saves shortcuts in UserDefaults; this registers them as they change.
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hotKeys.reload() }
         }
         Task {
             await store.syncInstalledEngine()
@@ -39,6 +48,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let policy: NSApplication.ActivationPolicy =
             UserDefaults.standard.bool(forKey: dockIconKey) || windowOpen ? .regular : .accessory
         if NSApp.activationPolicy() != policy { NSApp.setActivationPolicy(policy) }
+    }
+
+    private func perform(_ action: ShortcutAction) async {
+        switch action {
+        case .toggleEQ:
+            await store.toggleEQ()
+            guard let status = store.status else { return }
+            HUD.show(status.isOn ? "Equalizer On" : "Equalizer Off", symbol: status.isOn ? "slider.horizontal.3" : "speaker.wave.2")
+        case .nextPreset, .previousPreset:
+            guard let name = await store.stepPreset(by: action == .nextPreset ? 1 : -1) else { return }
+            HUD.show(displayName(name), symbol: SoundLibrary.preset(name)?.symbol ?? "slider.horizontal.3")
+        }
     }
 
     private func showOnboarding() {

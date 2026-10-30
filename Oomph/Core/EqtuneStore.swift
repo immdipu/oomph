@@ -522,6 +522,27 @@ final class EqtuneStore {
         }
     }
 
+    // MARK: - Global shortcuts
+
+    /// Turns the EQ on or off. Shortcuts work while no window polls, so this reads first, and it
+    /// never stops at a question: unsaved edits stay, for the next `on`.
+    func toggleEQ() async {
+        await refresh()
+        guard let status else { return }
+        if status.isOn { _ = await turnOff() } else { await setOn(true) }
+    }
+
+    /// Switches to the preset `offset` places along eqtune's list, wrapping around at either end,
+    /// and returns its name. A press during a switch steps on from the preset on its way.
+    @discardableResult
+    func stepPreset(by offset: Int) async -> String? {
+        if picked == nil { await refresh() }
+        guard let current = picked ?? status?.preset, let index = presets.firstIndex(of: current) else { return nil }
+        let next = presets[((index + offset) % presets.count + presets.count) % presets.count]
+        pick(next)
+        return next
+    }
+
     // MARK: - Engine install
 
     /// First run: install the LaunchAgent (it copies the bundled engine into Application
