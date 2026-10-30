@@ -47,7 +47,8 @@ xcodebuild test -project EQTuneBar.xcodeproj -scheme EQTuneBar -destination 'pla
 Nothing to do by hand: Oomph ships eqtune inside the app. On first launch, if the engine isn't
 installed, Oomph shows a setup screen; **Install engine** runs `eqtune install` (which copies
 the engine to `~/Library/Application Support/eqtune` and registers a LaunchAgent) and then
-`eqtune on`. macOS then asks once for audio-capture permission.
+`eqtune on`. macOS then asks once for audio-capture permission. eqtune doesn't answer
+anything until you respond, so the setup window waits and closes itself once the EQ is on.
 
 On every launch Oomph compares the installed engine's version with the bundled one and quietly
 re-runs `eqtune install` if they differ (for example after updating Oomph). Moving Oomph.app

@@ -8,7 +8,7 @@ import os
 @MainActor @Observable
 final class EqtuneStore {
     /// Places that show live state. Polling runs only while at least one is open.
-    enum Surface { case menu, editor, settings }
+    enum Surface { case menu, editor, settings, onboarding }
 
     /// Why there is no status to show.
     enum Blocker: Equatable {
@@ -240,9 +240,10 @@ final class EqtuneStore {
     // MARK: - Engine install
 
     /// First run: install the LaunchAgent (it copies the bundled engine into Application
-    /// Support), then start the EQ. While macOS still asks for audio-capture permission the
-    /// engine can't start and `on` fails, but eqtune keeps the on-intent and retries, so only a
-    /// missing intent counts as a failure.
+    /// Support), then start the EQ. Starting it makes macOS ask for audio-capture permission,
+    /// and the daemon answers nobody until the user does, so `on` and the status read after it
+    /// can time out; eqtune keeps the on-intent either way. Only a readable status with the EQ
+    /// off counts as a failure; while the daemon is busy, status is nil and the caller waits.
     func installEngine() async {
         let error = await mutate {
             _ = try await self.client.run(["install"])
@@ -251,7 +252,7 @@ final class EqtuneStore {
         }
         if let error {
             failure = Failure(error)
-        } else if status?.isOn != true {
+        } else if let status, !status.isOn {
             failure = Failure(message: "The engine is installed, but the EQ didn't turn on. Try the switch in the menu.")
         }
     }

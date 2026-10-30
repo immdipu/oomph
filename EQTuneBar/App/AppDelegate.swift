@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     static let dockIconKey = "showDockIcon"
 
     let store = EqtuneStore(client: ProcessEqtuneClient())
@@ -32,10 +32,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.title = "Welcome to Oomph"
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
+            window.delegate = self
             onboardingWindow = window
         }
         onboardingWindow?.center()
         onboardingWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        // Poll while it's open, so it notices when the EQ comes on and closes itself.
+        store.setVisible(.onboarding, true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        store.setVisible(.onboarding, false)
     }
 }
