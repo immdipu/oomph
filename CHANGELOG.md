@@ -31,6 +31,9 @@ All notable changes to Oomph are documented here. The format follows
 - Save all or discard all unsaved edits before preset changes eqtune would otherwise refuse.
 - Settings tabs for General, Devices, Engine and About, and a redesigned welcome screen.
 - Oomph shows in the Dock and ⌘-Tab while one of its windows is open.
+- **Downloads**: every version is published on GitHub Releases as a DMG signed with a
+  Developer ID and notarized by Apple. A downloaded copy installs the engine without the
+  download's quarantine flag, so macOS lets the engine start.
 - Contributor docs, issue and pull request templates, and CI.
 
 ### Changed

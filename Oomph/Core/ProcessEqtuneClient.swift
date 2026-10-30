@@ -15,6 +15,7 @@ actor ProcessEqtuneClient: EqtuneClient {
         let timeout: TimeInterval = ["install", "uninstall"].contains(args.first) ? 30 : 5
         let result: (code: Int32, stdout: String, stderr: String)
         do {
+            let binary = args.first == "install" ? try EqtuneBinary.unquarantinedCopy(of: binary) : binary
             result = try await Self.execute(binary, args, input: input, timeout: timeout)
         } catch {
             logger.error("\(command, privacy: .public): \(error.localizedDescription, privacy: .public)")
@@ -84,6 +85,17 @@ enum EqtuneBinary {
                 URL(filePath: "/usr/local/bin/eqtune"), URL(filePath: "/opt/homebrew/bin/eqtune")]
             .compactMap { $0 }
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    /// A temporary copy of `binary` without the quarantine flag a download leaves on Oomph.
+    /// `eqtune install` copies the binary it runs from, flag included, and signs that copy
+    /// ad hoc, and Gatekeeper refuses to start a quarantined program signed ad hoc.
+    static func unquarantinedCopy(of binary: URL) throws -> URL {
+        let copy = FileManager.default.temporaryDirectory.appending(path: "eqtune")
+        try? FileManager.default.removeItem(at: copy)
+        try FileManager.default.copyItem(at: binary, to: copy)
+        removexattr(copy.path, "com.apple.quarantine", 0)
+        return copy
     }
 
     /// The version in a binary's embedded Info.plist (eqtune links one in), without running it.
