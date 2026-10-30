@@ -262,6 +262,28 @@ struct EqtuneStoreTests {
         #expect(await client.inputs[client.calls.firstIndex(of: ["off"])!] == nil)
     }
 
+    /// Shortcuts step through eqtune's list and wrap around at either end.
+    @Test func shortcutsStepThroughPresetsAndWrapAround() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        // The mock lists bass, bright, mellow (active) and pro.
+        #expect(await store.stepPreset(by: -1) == "bright")
+        while store.picked != nil { await Task.yield() } // the mock doesn't switch, so this ends
+        #expect(await edits(client) == [["preset", "--", "bright"]])
+        let onPro = try #require(await client.outputs["status"]).replacingOccurrences(of: "preset:        mellow", with: "preset:        pro")
+        await client.setOutput(onPro, for: "status")
+        #expect(await store.stepPreset(by: 1) == "bass")
+    }
+
+    /// The on/off shortcut never stops at a question: unsaved edits stay for the next `on`.
+    @Test func shortcutTurnsTheEQOffWithoutAsking() async {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        await store.toggleEQ()
+        #expect(await edits(client) == [["off"]])
+        #expect(await client.inputs[client.calls.firstIndex(of: ["off"])!] == nil)
+    }
+
     /// An EQ the user turned off stays off: Oomph only turns back on what it turned off.
     @Test func noEQLeavesAnEQThatWasOffAlone() async throws {
         let (store, client) = await editorStore()
