@@ -23,8 +23,9 @@ All notable changes to Oomph are documented here. The format follows
 - **Headroom check** that warns when boosts would distort loud audio, with a one-click fix.
 - **Headphone correction import** from AutoEq / Equalizer APO parametric EQ files.
 - **Undo and redo** for band and preamp changes.
-- **Revert and Reset to Original**: go back to a preset's last saved version from the menu
-  bar or the equalizer, or restore a Sound Library or eqtune preset to its original tuning.
+- **Reset**: put a preset back to its original state from the equalizer, the menu bar or its
+  right-click menu: a Sound Library or eqtune preset to the tuning it shipped with, one of
+  your own to how you last saved it.
 - **Preset management**: new, duplicate, rename, delete, export, import, and reset eqtune's
   shipped presets.
 - Save all or discard all unsaved edits before preset changes eqtune would otherwise refuse.

@@ -175,16 +175,10 @@ private struct PresetEditor: View {
             HoldToCompareButton(inToolbar: true)
         }
         ToolbarItemGroup(placement: .primaryAction) {
-            Menu {
-                Button("Revert to Saved Version…") { Task { await Dialogs.revert(store: store) } }
-                    .disabled(!status.activeIsDirty)
-                Button("Reset to Original Tuning…") { Task { await Dialogs.resetToOriginal(preset.name, store: store) } }
-                    .disabled(!Dialogs.hasOriginal(preset.name))
-            } label: {
-                toolbarTitle("Revert")
-            }
-            .disabled(store.isBusy || !(status.activeIsDirty || Dialogs.hasOriginal(preset.name)))
-            .help("Go back to the last saved version, or to the preset’s original tuning")
+            Button { Task { await Dialogs.reset(preset.name, store: store) } } label: { toolbarTitle("Reset") }
+                .disabled(store.isBusy || !Dialogs.canReset(preset.name, store: store))
+                .help(Dialogs.hasOriginal(preset.name) ? "Put this preset back to its original tuning"
+                                                       : "Put this preset back to how it was last saved")
             Button { Task { await store.savePreset(as: preset.name) } } label: { toolbarTitle("Save") }
                 .disabled(!status.activeIsDirty || store.isBusy)
                 .keyboardShortcut("s")

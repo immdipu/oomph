@@ -50,10 +50,9 @@ struct PresetSidebar: View {
                             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                             presenting: pendingDelete) { name in
             Button("Delete", role: .destructive) { whenClean { await store.deletePreset(name) } }
-        } message: { name in
-            Text(EqtuneStore.shippedPresets.contains(name)
-                 ? "It’s one of eqtune’s own presets; Reset to Original Tuning brings it back."
-                 : "This can’t be undone. Export it first if you might want it again.")
+        } message: { _ in
+            // eqtune's own presets too: only eqtune's command line can bring one back.
+            Text("This can’t be undone. Export it first if you might want it again.")
         }
     }
 
@@ -130,11 +129,8 @@ struct PresetSidebar: View {
     }
 
     @ViewBuilder private func menu(for name: String) -> some View {
-        if store.status?.dirtyPresets.contains(name) == true {
-            if name == store.status?.preset {
-                Button("Save Changes") { Task { await store.savePreset(as: name) } }
-            }
-            Button("Revert to Saved Version…") { Task { await Dialogs.revert(store: store) } }
+        if store.status?.dirtyPresets.contains(name) == true, name == store.status?.preset {
+            Button("Save Changes") { Task { await store.savePreset(as: name) } }
             Divider()
         }
         Button("Duplicate…") {
@@ -159,8 +155,8 @@ struct PresetSidebar: View {
                                                           set: { store.setDevicePreset($0 ? name : nil, for: device.id) }))
         }
         Divider()
-        if Dialogs.hasOriginal(name) {
-            Button("Reset to Original Tuning…") { Task { await Dialogs.resetToOriginal(name, store: store) } }
+        if Dialogs.canReset(name, store: store) {
+            Button("Reset…") { Task { await Dialogs.reset(name, store: store) } }
         }
         Button("Delete…", role: .destructive) { pendingDelete = name }
             .disabled(store.presets.count < 2)
