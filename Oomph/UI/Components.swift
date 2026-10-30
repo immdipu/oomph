@@ -66,6 +66,20 @@ func displayName(_ preset: String) -> String {
     SoundLibrary.preset(preset)?.title ?? preset
 }
 
+/// What a preset sounds like, in a line: the library's own words, eqtune's presets as they
+/// ship, or, for one the user made, that it's theirs.
+func presetSummary(_ preset: String) -> String {
+    SoundLibrary.preset(preset)?.summary ?? shippedSummaries[preset] ?? "Your own tuning."
+}
+
+/// eqtune's own presets (`EqtuneStore.shippedPresets`), from their curves in Vendor/eqtune's
+/// config.rs with the preamp applied.
+private let shippedSummaries = [
+    "bright": "Big, punchy bass with crisp, lifted highs.",
+    "mellow": "Easy, laid-back sound with the harsh mids pulled well back.",
+    "pro": "A studio-style curve that cuts boominess deep at 125 Hz.",
+]
+
 // MARK: - Building blocks
 
 /// A small heading above a group of controls, with room for a control on the right.

@@ -110,23 +110,20 @@ struct PresetSidebar: View {
         .contentShape(Rectangle())
     }
 
-    /// A preset's icon and name, and what a library preset is for: it keeps saying so
-    /// after it's added.
+    /// A preset's icon, name and what it sounds like. A library preset keeps saying so after
+    /// it's added.
     private func label(_ name: String, icon: some ShapeStyle) -> some View {
-        let item = SoundLibrary.preset(name)
-        return HStack(alignment: .top, spacing: 8) {
-            Image(systemName: item?.symbol ?? "slider.horizontal.3")
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: SoundLibrary.preset(name)?.symbol ?? "slider.horizontal.3")
                 .foregroundStyle(icon)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayName(name))
                     .lineLimit(1)
-                if let summary = item?.summary {
-                    Text(summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
+                Text(presetSummary(name))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
         }
         .padding(.vertical, 2)

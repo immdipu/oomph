@@ -39,7 +39,8 @@ All notable changes to Oomph are documented here. The format follows
 - The app uses the icon's coral as its accent color.
 - The equalizer animates its changes: switching presets morphs the curve into the new one,
   and selecting a band, changing the scale or showing a banner no longer jumps the layout.
-  Sound Library presets keep their description in the sidebar after they're added.
+  Every preset in the sidebar says what it sounds like, eqtune's own included, and Sound
+  Library presets keep their description after they're added.
 
 ### Fixed
 

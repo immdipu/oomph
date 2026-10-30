@@ -96,4 +96,11 @@ struct SoundLibraryTests {
             #expect(NSImage(systemSymbolName: item.symbol, accessibilityDescription: nil) != nil, "\(item.symbol)")
         }
     }
+
+    /// In the sidebar eqtune's own presets say what they sound like, as the library's do.
+    @Test func eqtunesPresetsAreDescribed() {
+        for name in EqtuneStore.shippedPresets {
+            #expect(presetSummary(name) != presetSummary("my-own-preset"), "\(name)")
+        }
+    }
 }
