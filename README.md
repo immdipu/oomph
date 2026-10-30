@@ -73,12 +73,20 @@ the menu bar and adds the tools that make an EQ useful to everyone.
 ## Requirements
 
 - An Apple Silicon Mac with **macOS 14.2 or later** (eqtune's process taps arrived in 14.2).
-- To build: **Xcode 16 or later** and the **Rust toolchain** (`cargo`, from
+- To build from source: **Xcode 16 or later** and the **Rust toolchain** (`cargo`, from
   [rustup.rs](https://rustup.rs)). Oomph builds its own copy of eqtune from source.
 
 ## Getting started
 
-There's no signed download yet, so build it yourself; it takes a couple of minutes.
+### Download
+
+Get `Oomph-<version>.dmg` from the [latest release](https://github.com/immdipu/oomph/releases/latest),
+open it and drag Oomph to Applications. Releases are signed with a Developer ID and notarized
+by Apple, so Oomph opens like any other app you download.
+
+### Build from source
+
+It takes a couple of minutes.
 
 ```bash
 git clone --recurse-submodules https://github.com/immdipu/oomph.git
@@ -91,6 +99,8 @@ cd oomph && xcodebuild -project Oomph.xcodeproj -scheme Oomph -configuration Rel
 Then open `build/Build/Products/Release/Oomph.app`, or open `Oomph.xcodeproj` in Xcode and
 press Run. Signing uses an "Apple Development" certificate and the team set in the project
 (`DEVELOPMENT_TEAM`); set your own team before building on another Mac.
+
+### First launch
 
 On first launch Oomph shows a short setup screen. **Install Audio Engine** installs eqtune's
 background process and turns the EQ on. macOS then asks once for permission to capture system
@@ -143,7 +153,9 @@ The **Build eqtune engine** phase (`Scripts/build-eqtune.sh`) runs `cargo build 
 copies eqtune's licenses to `Contents/Resources/Licenses`. On every launch Oomph compares the
 installed engine's version with the bundled one and reinstalls it if they differ (for example
 after updating Oomph). The daemon runs from its own copy in
-`~/Library/Application Support/eqtune`, so moving Oomph.app doesn't affect it.
+`~/Library/Application Support/eqtune`, so moving Oomph.app doesn't affect it. Oomph runs
+`install` from a temporary copy of the engine without a download's quarantine flag: eqtune signs
+its copy ad hoc, and Gatekeeper won't start a quarantined program that's signed ad hoc.
 
 ## Development
 
@@ -205,9 +217,7 @@ eqtune. Uninstalling the engine (Settings › Engine) keeps them.
   engine starts. A command can then report "eqtune was busy"; the next refresh shows what happened.
 - **eqtune never clears `last error`.** Oomph shows a warning only while the EQ should be running
   and isn't (auto-off pauses don't count).
-- **Untested: a downloaded copy.** `eqtune install` copies the engine and signs the copy ad hoc.
-  If Oomph is downloaded (and quarantined), Gatekeeper may refuse to start that copy.
-- **Not yet:** global hotkeys, a spectrum analyzer, per-app EQ, Intel builds, signed releases.
+- **Not yet:** global hotkeys, a spectrum analyzer, per-app EQ, Intel builds.
 
 ## Contributing
 

@@ -70,6 +70,38 @@ real daemon). Pure UI layout doesn't need one, but check it in light and dark mo
 Commit messages: a short summary in the imperative ("Add a preset per output device"), then a
 body explaining what changed and why.
 
+## Releasing
+
+Pushing a version tag runs the [release workflow](.github/workflows/release.yml). It builds
+Oomph with `Scripts/release.sh`, which signs the app and its bundled engine with a Developer ID
+and notarizes and staples both the app and the disk image. The workflow then publishes
+`Oomph-<version>.dmg` on a GitHub release, with that version's CHANGELOG section as the notes.
+
+1. In CHANGELOG.md, move the *Unreleased* entries under a new `## [1.1.0] - YYYY-MM-DD`
+   heading. The workflow stops if the tag's version has no section.
+2. Commit and push, then tag: `git tag v1.1.0 && git push origin v1.1.0`. The tag sets the
+   app's version.
+
+The workflow needs these repository secrets (Settings › Secrets and variables › Actions):
+
+| Secret | Value |
+|---|---|
+| `DEVELOPER_ID_CERTIFICATE_P12` | A *Developer ID Application* certificate and its private key, exported from Keychain Access as a .p12, base64-encoded: `base64 -i Certificates.p12 \| pbcopy`. Only the developer account's Account Holder can create the certificate. |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | The password you gave the .p12 when exporting it. |
+| `NOTARY_KEY` | The contents of an App Store Connect API team key (.p8) with the Developer role, from Users and Access › Integrations in App Store Connect. |
+| `NOTARY_KEY_ID` | That key's Key ID. |
+| `NOTARY_ISSUER_ID` | The Issuer ID shown above the list of keys. |
+
+To check a release build without notarizing or publishing it, run the script with your own
+signing identity:
+
+```bash
+SIGN_IDENTITY="Apple Development" Scripts/release.sh 1.1.0
+```
+
+If notarization fails, the workflow's log shows the submission ID, and
+`xcrun notarytool log <id>` with the same key shows why.
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). Be kind.
