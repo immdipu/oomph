@@ -98,9 +98,10 @@ struct SoundLibraryTests {
     }
 
     /// In the sidebar eqtune's own presets say what they sound like, as the library's do.
-    @Test func eqtunesPresetsAreDescribed() {
+    @MainActor @Test func eqtunesPresetsAreDescribed() {
+        let store = EqtuneStore(client: MockEqtuneClient(), defaults: UserDefaults(suiteName: "oomph-tests-\(UUID())")!)
         for name in EqtuneStore.shippedPresets {
-            #expect(presetSummary(name) != presetSummary("my-own-preset"), "\(name)")
+            #expect(store.summary(name) != store.summary("my-own-preset"), "\(name)")
         }
     }
 }

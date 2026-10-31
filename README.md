@@ -38,6 +38,9 @@ the menu bar and adds the tools that make an EQ useful to everyone.
 - **A Sound Library of ready-made tunings**: Bass Boost, Treble Reducer, Laptop Speakers,
   Loudness, Vocal Clarity, Dialogue, Electronic, Rock, Footsteps and more, each with a
   one-line description of what it's for.
+- **Built-in presets you can't break.** Tweak Bass Boost and save, and Oomph asks for a name
+  and saves *your* version as a new preset ("My Bass Boost"), so the original is always there.
+  Presets can be called anything, like "Movie Night".
 - **Hold to Compare.** Press and hold to hear your Mac without the EQ, let go to hear it
   again. Quick A/B switching is the surest way to tell whether a change actually sounds better.
 - **A preset for each output.** Tick *Always use this preset on AirPods* once, and Oomph
@@ -131,7 +134,10 @@ once the EQ is on.
 | Keep your changes | **Save** (⌘S), or **Save As…** for a new preset |
 
 Edits apply live. Like eqtune, Oomph keeps them as *unsaved changes* until you save or reset them,
-and marks edited presets with an orange dot.
+and marks edited presets with an orange dot. eqtune's presets (Bright, Mellow, Pro) and the Sound
+Library's are built in and never change: saving one saves your changes as a new preset instead,
+which says which built-in it came from. Oomph remembers the names you give presets in its own
+settings; eqtune gets a name made from them ("Movie-Night").
 
 ## How it works
 

@@ -120,7 +120,7 @@ private struct DeviceSettings: View {
             Text(unset).tag("")
             Text("No EQ").tag(EqtuneStore.noEQ)
             Divider()
-            ForEach(store.presets, id: \.self) { Text(displayName($0)).tag($0) }
+            ForEach(store.presets, id: \.self) { Text(store.displayName($0)).tag($0) }
         } label: {
             Label(title: title, icon: icon)
         }

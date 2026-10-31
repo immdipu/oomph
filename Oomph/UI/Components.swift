@@ -61,15 +61,18 @@ enum Format {
     }
 }
 
-/// Library presets show their title; everything else shows eqtune's name.
-func displayName(_ preset: String) -> String {
-    SoundLibrary.preset(preset)?.title ?? preset
-}
+extension EqtuneStore {
+    /// What a preset sounds like, in a line: the library's own words, eqtune's presets as they
+    /// ship, the built-in a copy started from, or, for one the user made, that it's theirs.
+    func summary(_ preset: String) -> String {
+        SoundLibrary.preset(preset)?.summary ?? shippedSummaries[preset]
+            ?? origins[preset].map { "Your version of \(displayName($0))." } ?? "Your own tuning."
+    }
 
-/// What a preset sounds like, in a line: the library's own words, eqtune's presets as they
-/// ship, or, for one the user made, that it's theirs.
-func presetSummary(_ preset: String) -> String {
-    SoundLibrary.preset(preset)?.summary ?? shippedSummaries[preset] ?? "Your own tuning."
+    /// A preset's icon: a library preset's own, which copies of it keep.
+    func symbol(_ preset: String) -> String {
+        SoundLibrary.preset(origins[preset] ?? preset)?.symbol ?? "slider.horizontal.3"
+    }
 }
 
 /// eqtune's own presets (`EqtuneStore.shippedPresets`), from their curves in Vendor/eqtune's

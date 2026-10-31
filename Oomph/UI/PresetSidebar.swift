@@ -5,7 +5,6 @@ import SwiftUI
 struct PresetSidebar: View {
     @Environment(EqtuneStore.self) private var store
     @Environment(AudioOutputs.self) private var outputs
-    @State private var nameRequest: NameRequest?
     @State private var pendingDelete: String?
     @State private var findingHeadphones = false
     /// Library presets being added: their rows show progress, and another click on one is
@@ -42,9 +41,8 @@ struct PresetSidebar: View {
         .animation(.oomph, value: store.status?.dirtyPresets)
         .disabled(store.status == nil)
         .safeAreaInset(edge: .bottom) { bottomBar }
-        .namePrompt($nameRequest)
         .sheet(isPresented: $findingHeadphones) { HeadphoneSearch() }
-        .confirmationDialog("Delete “\(pendingDelete.map(displayName) ?? "")”?",
+        .confirmationDialog("Delete “\(pendingDelete.map(store.displayName) ?? "")”?",
                             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
                             presenting: pendingDelete) { name in
             Button("Delete", role: .destructive) { whenClean { await store.deletePreset(name) } }
@@ -93,13 +91,13 @@ struct PresetSidebar: View {
     /// it's added.
     private func label(_ name: String, icon: some ShapeStyle) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: SoundLibrary.preset(name)?.symbol ?? "slider.horizontal.3")
+            Image(systemName: store.symbol(name))
                 .foregroundStyle(icon)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(displayName(name))
+                Text(store.displayName(name))
                     .lineLimit(1)
-                Text(presetSummary(name))
+                Text(store.summary(name))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -110,22 +108,27 @@ struct PresetSidebar: View {
 
     @ViewBuilder private func menu(for name: String) -> some View {
         if store.status?.dirtyPresets.contains(name) == true, name == store.status?.preset {
-            Button("Save Changes") { Task { await store.savePreset(name) } }
+            if EqtuneStore.isBuiltIn(name) {
+                Button("Save as New Preset…") { Task { await Dialogs.askName(.saveAs(name, store: store), store: store) } }
+            } else {
+                Button("Save Changes") { Task { await store.savePreset(name) } }
+            }
             Divider()
         }
         Button("Duplicate…") {
             whenClean {
-                nameRequest = NameRequest(title: "Duplicate “\(displayName(name))”", action: "Duplicate",
-                                          initial: store.availableName("\(name)-copy")) {
+                await Dialogs.askName(NameRequest(title: "Duplicate “\(store.displayName(name))”", action: "Duplicate",
+                                                  initial: store.copyTitle(of: name)) {
                     await store.duplicatePreset(name, as: $0)
-                }
+                }, store: store)
             }
         }
         Button("Rename…") {
             whenClean {
-                nameRequest = NameRequest(title: "Rename “\(displayName(name))”", action: "Rename", initial: name) {
-                    await store.renamePreset(name, to: $0)
-                }
+                await Dialogs.askName(NameRequest(title: "Rename “\(store.displayName(name))”", action: "Rename",
+                                                  initial: store.displayName(name), own: name) {
+                    if $0 != name { await store.renamePreset(name, to: $0) } // otherwise only its title changes
+                }, store: store)
             }
         }
         Button("Export…") { Task { await Dialogs.exportPreset(name, store: store) } }
@@ -147,9 +150,9 @@ struct PresetSidebar: View {
             Menu {
                 Button("New Preset…") {
                     whenClean {
-                        nameRequest = NameRequest(title: "New Preset", action: "Create", initial: store.availableName("my-preset")) {
+                        await Dialogs.askName(NameRequest(title: "New Preset", action: "Create", initial: store.availableTitle("My Preset")) {
                             await store.newPreset(named: $0)
-                        }
+                        }, store: store)
                     }
                 }
                 Divider()

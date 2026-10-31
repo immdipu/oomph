@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             HUD.show(status.isOn ? "Equalizer On" : "Equalizer Off", symbol: status.isOn ? "slider.horizontal.3" : "speaker.wave.2")
         case .nextPreset, .previousPreset:
             guard let name = await store.stepPreset(by: action == .nextPreset ? 1 : -1) else { return }
-            HUD.show(displayName(name), symbol: SoundLibrary.preset(name)?.symbol ?? "slider.horizontal.3")
+            HUD.show(store.displayName(name), symbol: store.symbol(name))
         }
     }
 
