@@ -106,17 +106,60 @@ struct EqtuneStoreTests {
     @Test func newPresetNamesAvoidExistingAndReservedOnes() async {
         let (store, _) = await editorStore()
         defer { store.setVisible(.editor, false) }
-        #expect(store.nameProblem("my-mix_2.v1", allowActive: false) == nil)
-        #expect(store.nameProblem("mellow", allowActive: true) == nil) // the active one: save in place
-        #expect(store.nameProblem("mellow", allowActive: false) != nil)
-        #expect(store.nameProblem("bright", allowActive: true) != nil) // shipped: would overwrite
-        #expect(store.nameProblem("none", allowActive: true) != nil)
-        #expect(store.nameProblem("has space", allowActive: true) != nil)
-        #expect(store.nameProblem("rock", allowActive: false) != nil) // a Sound Library preset's name
-        #expect(store.availableName("rock") == "rock-2")
+        #expect(store.availableName("my-mix_2.v1") == "my-mix_2.v1")
+        #expect(store.availableName("rock") == "rock-2") // a Sound Library preset's name
         #expect(store.availableName("mellow") == "mellow-2")
+        #expect(store.availableName("none") == "none-2")
         #expect(store.availableName("Sennheiser HD 600") == "Sennheiser-HD-600")
         #expect(store.availableName("  ") == "preset")
+    }
+
+    /// People name presets in their own words; eqtune gets a name made from them.
+    @Test func presetNamesAreInPlainWords() async {
+        let (store, _) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        #expect(store.titleProblem("Movie Night") == nil)
+        #expect(store.name(for: "Movie Night") == "Movie-Night")
+        #expect(store.titleProblem("BASS") != nil) // taken, whatever the case
+        #expect(store.titleProblem("Mellow") != nil) // eqtune's own, shown capitalized
+        #expect(store.titleProblem("Rock") != nil) // a Sound Library preset, added or not
+        #expect(store.titleProblem("") != nil)
+        #expect(store.availableTitle("Bass") == "Bass 2")
+        #expect(store.copyTitle(of: "mellow") == "My Mellow" && store.copyTitle(of: "bass") == "bass copy")
+        // A preset still called what it's called keeps its eqtune name: a rename that changes
+        // nothing must not rename a built-in.
+        #expect(store.titleProblem("Mellow", own: "mellow") == nil)
+        #expect(store.name(for: "Mellow", own: "mellow") == "mellow")
+        #expect(store.name(for: "Bass Boost", own: "bass-boost") == "bass-boost")
+        #expect(store.name(for: "Movie  Night!", own: "Movie-Night") == "Movie-Night")
+
+        store.setTitle("Bass Line", for: "bass")
+        store.setTitle("Mellow", for: "mellow") // what it's called anyway: nothing to remember
+        #expect(store.displayName("bass") == "Bass Line" && store.titles == ["bass": "Bass Line"])
+        await store.renamePreset("bass", to: "Bass-Line")
+        #expect(store.displayName("Bass-Line") == "Bass Line" && store.titles["bass"] == nil)
+        await store.deletePreset("Bass-Line")
+        #expect(store.titles.isEmpty)
+    }
+
+    /// A built-in is never saved over: its edits go to a new preset, which says where it came from.
+    @Test func builtInsAreSavedAsNewPresets() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        await store.savePreset("mellow") // eqtune's own, with unsaved edits
+        #expect(await edits(client).isEmpty && store.failure != nil)
+
+        let request = NameRequest.saveAs("mellow", store: store)
+        #expect(request.initial == "My Mellow" && request.own == nil)
+        // eqtune switches to the new preset once it's saved.
+        let status = try #require(await client.outputs["status"])
+        await client.setOutput(status.replacingOccurrences(of: "preset:        mellow", with: "preset:        My-Mellow"), for: "status")
+        await client.setOutput("  bass\n  bright\n  mellow\n* My-Mellow\n  pro\n", for: "presets")
+        await request.run("My Mellow", store: store)
+        #expect(await edits(client) == [["preset-save", "--", "My-Mellow"]])
+        #expect(store.displayName("My-Mellow") == "My Mellow")
+        #expect(store.summary("My-Mellow") == "Your version of Mellow.")
+        #expect(NameRequest.saveAs("My-Mellow", store: store).own == "My-Mellow") // the user's own: may save in place
     }
 
     /// Undo sends the band commands that turn eqtune's tuning back into the earlier one.
@@ -189,6 +232,20 @@ struct EqtuneStoreTests {
             ["preset", "--", "my-mix.v2"], ["preset-save", "--", "my-mix.v2"],
             ["preset", "--", "mellow"],
         ])
+    }
+
+    /// Saving everything puts a built-in's edits in a new preset, “My Rock”, like Save does.
+    @Test func saveAllCopiesBuiltIns() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        await client.setOutput(try fixture("status-dirty.txt").replacingOccurrences(of: "my-mix.v2", with: "rock"), for: "status")
+        await store.refresh()
+        await store.saveAll()
+        #expect(await edits(client) == [
+            ["preset", "--", "rock"], ["preset-save", "--", "My-Rock"],
+            ["preset", "--", "bass"], ["preset-save", "--", "bass"],
+        ])
+        #expect(store.displayName("My-Rock") == "My Rock" && store.symbol("My-Rock") == "guitars")
     }
 
     /// eqtune discards only through `off`'s prompt, so the EQ comes back on afterwards.

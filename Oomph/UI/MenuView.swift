@@ -194,7 +194,7 @@ struct MenuView: View {
                             Image(systemName: "checkmark")
                                 .opacity(name == (store.picked ?? status.preset) ? 1 : 0)
                                 .font(.caption.weight(.bold))
-                            Text(displayName(name))
+                            Text(store.displayName(name))
                             if status.dirtyPresets.contains(name) {
                                 Circle().fill(.orange).frame(width: 6, height: 6)
                                     .help("Unsaved changes")
@@ -207,16 +207,19 @@ struct MenuView: View {
             .fixedSize(horizontal: false, vertical: true)
             if status.activeIsDirty {
                 HStack {
-                    Text("“\(displayName(status.preset))” has unsaved changes.")
+                    Text("“\(store.displayName(status.preset))” has unsaved changes.")
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset") { Task { await Dialogs.reset(status.preset, store: store) } }
                         .controlSize(.small)
-                        .help(Dialogs.hasOriginal(status.preset)
-                              ? "Put “\(displayName(status.preset))” back to its original tuning"
-                              : "Put “\(displayName(status.preset))” back to how it was last saved")
-                    Button("Save") { Task { await store.savePreset(status.preset) } }
+                        .help(EqtuneStore.isBuiltIn(status.preset)
+                              ? "Put “\(store.displayName(status.preset))” back to its original tuning"
+                              : "Put “\(store.displayName(status.preset))” back to how it was last saved")
+                    Button("Save") { Task { await save(status.preset) } }
                         .controlSize(.small)
+                        .help(EqtuneStore.isBuiltIn(status.preset)
+                              ? "“\(store.displayName(status.preset))” is built in: save these changes as a new preset"
+                              : "Save these changes to “\(store.displayName(status.preset))”")
                 }
                 .font(.caption)
                 .padding(.horizontal, 6)
@@ -224,7 +227,7 @@ struct MenuView: View {
             if let device = outputs.current {
                 Toggle(isOn: Binding(get: { store.devicePresets[device.id] == status.preset },
                                      set: { store.setDevicePreset($0 ? status.preset : nil, for: device.id) })) {
-                    Text("Always use “\(displayName(status.preset))” on \(device.name)")
+                    Text("Always use “\(store.displayName(status.preset))” on \(device.name)")
                         .lineLimit(2, reservesSpace: true) // so the rows below don't move with the name
                 }
                 .toggleStyle(.checkbox)
@@ -243,6 +246,12 @@ struct MenuView: View {
         toneDrafts.reduce(into: preset) { preset, draft in
             preset.bands = preset.bands(settingTone: draft.key, to: draft.value)
         }
+    }
+
+    /// A built-in stays as it is: its changes can only go to a new preset.
+    private func save(_ preset: String) async {
+        guard EqtuneStore.isBuiltIn(preset) else { return await store.savePreset(preset) }
+        await Dialogs.askName(.saveAs(preset, store: store), store: store)
     }
 
     private func toggle(_ on: Bool) async {

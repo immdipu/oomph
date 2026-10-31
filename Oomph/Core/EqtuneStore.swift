@@ -46,6 +46,12 @@ final class EqtuneStore {
     /// eqtune's own presets; `eqtune reset` restores them.
     nonisolated static let shippedPresets = ["bright", "mellow", "pro"]
 
+    /// eqtune's presets and the Sound Library's stay as they shipped: Oomph never saves over
+    /// one, and their edits go to a new preset instead.
+    nonisolated static func isBuiltIn(_ name: String) -> Bool {
+        shippedPresets.contains(name) || SoundLibrary.preset(name) != nil
+    }
+
     private(set) var status: EqtuneStatus?
     private(set) var presets: [String] = []
     /// The active preset with exact values.
@@ -67,6 +73,11 @@ final class EqtuneStore {
     private(set) var devicePresets: [String: String]
     /// The EQ was turned off for a "No EQ" output, so the next output turns it back on.
     private var offForOutput = false
+    /// Preset → the name the user gave it ("Movie Night"), where eqtune's rules made its eqtune
+    /// name differ ("Movie-Night").
+    private(set) var titles: [String: String]
+    /// Preset → the built-in it was saved or duplicated from.
+    private(set) var origins: [String: String]
 
     private let client: any EqtuneClient
     private let defaults: UserDefaults
@@ -77,12 +88,14 @@ final class EqtuneStore {
     /// Earlier tunings of each preset, for Undo and Redo.
     private var history: [String: History] = [:]
 
-    private static let devicePresetsKey = "devicePresets"
+    private static let devicePresetsKey = "devicePresets", titlesKey = "presetTitles", originsKey = "presetOrigins"
 
     init(client: any EqtuneClient, defaults: UserDefaults = .standard) {
         self.client = client
         self.defaults = defaults
         devicePresets = defaults.dictionary(forKey: Self.devicePresetsKey) as? [String: String] ?? [:]
+        titles = defaults.dictionary(forKey: Self.titlesKey) as? [String: String] ?? [:]
+        origins = defaults.dictionary(forKey: Self.originsKey) as? [String: String] ?? [:]
     }
 
     /// The EQ should be processing audio but isn't, and not because auto-off paused it on
@@ -99,28 +112,94 @@ final class EqtuneStore {
     var canUndo: Bool { status.map { history[$0.preset]?.undo.isEmpty == false } ?? false }
     var canRedo: Bool { status.map { history[$0.preset]?.redo.isEmpty == false } ?? false }
 
-    /// Why `name` can't be used for a new preset, or nil if it can. eqtune accepts shipped
-    /// names as silent overwrites and rejects other existing ones, so Oomph refuses both;
-    /// `none` would be unreadable in status's `dirty presets: none`.
-    func nameProblem(_ name: String, allowActive: Bool) -> String? {
-        if !Preset.isValidName(name) { return "Use 1–64 letters, digits, “-”, “_” or “.”." }
-        if name == "none" { return "“none” is reserved." }
-        if presets.contains(name), !(allowActive && name == status?.preset) {
-            return "A preset named “\(name)” already exists."
+    // MARK: - Naming
+
+    // People name presets in their own words. eqtune takes only letters, digits, "-", "_" and
+    // ".", so it gets a name made from them, and Oomph remembers the words as the title.
+
+    /// What Oomph calls `preset`: a library preset's title, the name the user gave it, or
+    /// eqtune's name (its own presets capitalized).
+    func displayName(_ preset: String) -> String {
+        SoundLibrary.preset(preset)?.title ?? titles[preset] ?? (Self.shippedPresets.contains(preset) ? preset.capitalized : preset)
+    }
+
+    /// Why a preset can't be called `title`, or nil if it can. `own` is the preset being
+    /// renamed or saved over, which may keep its name.
+    func titleProblem(_ title: String, own: String? = nil) -> String? {
+        if title.isEmpty { return "Type a name for the preset." }
+        if title.count > 64 { return "Use 64 characters or fewer." }
+        let same = { (other: String) in other.compare(title, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+        if let taken = presets.first(where: { $0 != own && same(displayName($0)) }) {
+            return "A preset named “\(displayName(taken))” already exists."
         }
-        // Library presets are known by name: one named like them would take on their title,
-        // description and original tuning.
-        if SoundLibrary.preset(name) != nil, !(allowActive && name == status?.preset) {
-            return "“\(name)” is the name of a Sound Library preset."
+        if let item = SoundLibrary.presets.first(where: { $0.id != own && (same($0.title) || same($0.id)) }) {
+            return "“\(item.title)” is the name of a Sound Library preset."
         }
         return nil
     }
 
-    /// `base` made into a valid preset name that isn't taken yet: `base`, `base-2`, `base-3`…
+    /// `base`, or `base 2`, `base 3`…: the first that no preset is called yet.
+    func availableTitle(_ base: String) -> String {
+        let trimmed = base.trimmingCharacters(in: .whitespaces)
+        let stem = String((trimmed.isEmpty ? "My Preset" : trimmed).prefix(60))
+        return ([stem] + (2...999).map { "\(stem) \($0)" }).first { titleProblem($0) == nil } ?? stem
+    }
+
+    /// The name to offer for a copy of `preset`: “My Bass Boost” for a built-in, “Movie Night
+    /// copy” for one of the user's own.
+    func copyTitle(of preset: String) -> String {
+        availableTitle(Self.isBuiltIn(preset) ? "My \(displayName(preset))" : "\(displayName(preset)) copy")
+    }
+
+    /// The eqtune name for a preset the user calls `title`: `title` itself if eqtune takes it,
+    /// otherwise a free name made from it. `own` keeps its name when it's still called that or
+    /// the title still makes it (a save in place, a rename that only changes punctuation).
+    func name(for title: String, own: String? = nil) -> String {
+        if let own, title == displayName(own) || Self.slug(title) == own { return own }
+        return availableName(title)
+    }
+
+    /// Remembers that the user calls `name` `title`.
+    func setTitle(_ title: String, for name: String) {
+        titles[name] = nil
+        if displayName(name) != title { titles[name] = title }
+        defaults.set(titles, forKey: Self.titlesKey)
+    }
+
+    /// `base` made into an eqtune name that isn't taken yet: `base`, `base-2`, `base-3`…
     func availableName(_ base: String) -> String {
-        let cleaned = base.replacing(/[^A-Za-z0-9._-]+/, with: "-").trimmingCharacters(in: CharacterSet(charactersIn: "-."))
-        let stem = String((cleaned.isEmpty ? "preset" : cleaned).prefix(58))
-        return ([stem] + (2...999).map { "\(stem)-\($0)" }).first { nameProblem($0, allowActive: false) == nil } ?? stem
+        let stem = String(Self.slug(base).prefix(58))
+        return ([stem] + (2...999).map { "\(stem)-\($0)" }).first(where: isFree) ?? stem
+    }
+
+    /// Whether a new preset can be called `name`. eqtune saves over a shipped name silently and
+    /// rejects other existing ones; `none` would be unreadable in status's `dirty presets: none`;
+    /// and a preset with a built-in's name would pass for that built-in.
+    private func isFree(_ name: String) -> Bool {
+        Preset.isValidName(name) && name != "none" && !presets.contains(name) && !Self.isBuiltIn(name)
+    }
+
+    /// `text` with every run of characters eqtune's names can't have turned into "-".
+    private nonisolated static func slug(_ text: String) -> String {
+        let cleaned = text.replacing(/[^A-Za-z0-9._-]+/, with: "-").trimmingCharacters(in: CharacterSet(charactersIn: "-."))
+        return cleaned.isEmpty ? "preset" : cleaned
+    }
+
+    /// `copy` was just made from `source`: it remembers the built-in that started it.
+    private func noteCopy(of source: String, as copy: String) {
+        origins[copy] = Self.isBuiltIn(source) ? source : origins[source]
+        defaults.set(origins, forKey: Self.originsKey)
+    }
+
+    /// What Oomph remembers about `name` now belongs to `newName`, or goes with it (nil).
+    private func moveNotes(from name: String, to newName: String?) {
+        let (title, origin) = (titles.removeValue(forKey: name), origins.removeValue(forKey: name))
+        if let newName {
+            titles[newName] = title
+            origins[newName] = origin
+        }
+        defaults.set(titles, forKey: Self.titlesKey)
+        defaults.set(origins, forKey: Self.originsKey)
     }
 
     // MARK: - Reading
@@ -212,9 +291,6 @@ final class EqtuneStore {
         failure = Failure(error)
         return nil
     }
-
-    /// Answers `off`'s save/discard prompt with "o": every preset keeps its edits.
-    func saveEditsAndTurnOff() async { await perform(["off"], input: "o\n") }
 
     /// Drops every unsaved edit. `off` has no flag for that and switching presets keeps
     /// edits, so answer `off`'s own prompt with "d" (discard), like a person would.
@@ -365,28 +441,51 @@ final class EqtuneStore {
 
     // MARK: - Saving and discarding
 
-    /// Saves `preset`, the active one, under its own name or as `name`.
+    /// Saves `preset`, the active one, under its own name or as a new preset `name`, which
+    /// eqtune then switches to. A built-in is never saved over: its edits can only go to a new
+    /// preset, and it stays as it was.
     func savePreset(_ preset: String, as name: String? = nil) async {
-        await perform(["preset-save", "--", name ?? preset], on: preset)
+        let target = name ?? preset
+        guard target != preset || !Self.isBuiltIn(preset) else {
+            failure = Failure(message: "“\(displayName(preset))” is built in, so save your changes as a new preset.")
+            return
+        }
+        await perform(["preset-save", "--", target], on: preset)
+        guard target != preset, status?.preset == target else { return }
+        noteCopy(of: preset, as: target)
+        history[target] = history.removeValue(forKey: preset) // the edits went with the copy
     }
 
-    /// Saves every preset with unsaved edits under its own name. `preset-save` only saves
-    /// the active preset, so visit each of the others, then come back.
+    /// Saves every preset with unsaved edits. `preset-save` only saves the active preset, so
+    /// visit each of the others, then come back. A built-in's edits go to a new preset, “My
+    /// Bass Boost”, and if the built-in was in use, the new preset is in use afterwards.
     func saveAll() async {
         let error = await mutate {
             guard let status = self.status else { return }
             for name in status.dirtyPresets where name != status.preset {
                 _ = try await self.client.run(["preset", "--", name])
-                _ = try await self.client.run(["preset-save", "--", name])
+                try await self.saveEdits(of: name)
             }
             if status.dirtyPresets.contains(where: { $0 != status.preset }) {
                 _ = try await self.client.run(["preset", "--", status.preset])
             }
             if status.activeIsDirty {
-                _ = try await self.client.run(["preset-save", "--", status.preset])
+                try await self.saveEdits(of: status.preset)
             }
         }
         if let error { failure = Failure(error) }
+    }
+
+    /// Saves the edits of `name`, the active preset: in place, or for a built-in, as a new one.
+    private func saveEdits(of name: String) async throws {
+        guard Self.isBuiltIn(name) else {
+            _ = try await client.run(["preset-save", "--", name])
+            return
+        }
+        let title = copyTitle(of: name), copy = self.name(for: title)
+        _ = try await client.run(["preset-save", "--", copy])
+        setTitle(title, for: copy)
+        noteCopy(of: name, as: copy)
     }
 
     /// Drops every unsaved edit. eqtune discards only through `off`'s own question, so
@@ -436,6 +535,7 @@ final class EqtuneStore {
     /// Copies `name` as `copy` and switches to the copy.
     func duplicatePreset(_ name: String, as copy: String) async {
         await perform(["preset-clone", "--", name, copy])
+        if failure == nil { noteCopy(of: name, as: copy) }
     }
 
     func renamePreset(_ name: String, to newName: String) async {
@@ -443,6 +543,7 @@ final class EqtuneStore {
         guard failure == nil else { return }
         for (uid, preset) in devicePresets where preset == name { setDevicePreset(newName, for: uid) }
         history[newName] = history.removeValue(forKey: name)
+        moveNotes(from: name, to: newName)
     }
 
     /// Deletes `name`; if it was active, eqtune switches to the first remaining preset.
@@ -451,6 +552,7 @@ final class EqtuneStore {
         guard failure == nil else { return }
         for (uid, preset) in devicePresets where preset == name { setDevicePreset(nil, for: uid) }
         history[name] = nil
+        moveNotes(from: name, to: nil)
     }
 
     /// Puts one of eqtune's shipped presets back to its original tuning. `reset` asks

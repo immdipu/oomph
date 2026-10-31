@@ -74,7 +74,6 @@ private struct PresetEditor: View {
     /// The automatic pick for the open preset, made when it opened. After that it only ever
     /// widens, so a release near 12 dB can't flip the graph back and forth.
     @State private var autoScale: (preset: String, wide: Bool)?
-    @State private var nameRequest: NameRequest?
     @FocusState private var graphFocused: Bool
 
     private var shown: [Band] { preset.bands.map { drafts[key($0.hz)] ?? $0 } }
@@ -197,10 +196,9 @@ private struct PresetEditor: View {
         // don't: a drag follows the pointer, and eqtune's answer to it matches what's shown.
         .animation(.oomph, value: preset.name)
         .animation(.oomph, value: status.isOn)
-        .navigationTitle(displayName(preset.name))
-        .navigationSubtitle(status.activeIsDirty ? "Edited" : "Saved")
+        .navigationTitle(store.displayName(preset.name))
+        .navigationSubtitle(status.activeIsDirty ? "Edited" : EqtuneStore.isBuiltIn(preset.name) ? "Built in" : "Saved")
         .toolbar { toolbar }
-        .namePrompt($nameRequest)
         .onAppear { autoScale = (preset.name, needsWide) }
         .onChange(of: preset.name) {
             pending.values.forEach { $0.cancel() }
@@ -247,22 +245,21 @@ private struct PresetEditor: View {
                 toolbarTitle("Reset")
             }
             .disabled(resetting || !Dialogs.canReset(preset.name, store: store))
-                .help(Dialogs.hasOriginal(preset.name) ? "Put this preset back to its original tuning"
+                .help(EqtuneStore.isBuiltIn(preset.name) ? "Put this preset back to its original tuning"
                                                        : "Put this preset back to how it was last saved")
-            Button { Task { await sendEdits(); await store.savePreset(preset.name) } } label: { toolbarTitle("Save") }
-                .disabled(!status.activeIsDirty && drafts.isEmpty && !typing)
-                .keyboardShortcut("s")
-                .help("Save these changes to “\(displayName(preset.name))” (⌘S)")
             Button {
-                endTyping() // before the prompt takes the keyboard
-                nameRequest = NameRequest(title: "Save Preset As", action: "Save",
-                                          initial: store.availableName("\(preset.name)-copy"), allowActive: true) {
-                    await sendEdits()
-                    await store.savePreset(preset.name, as: $0)
-                }
+                // A built-in stays as it is: its changes can only go to a new preset.
+                if EqtuneStore.isBuiltIn(preset.name) { return saveAs() }
+                Task { await sendEdits(); await store.savePreset(preset.name) }
             } label: {
-                toolbarTitle("Save As…")
+                toolbarTitle("Save")
             }
+            .disabled(!status.activeIsDirty && drafts.isEmpty && !typing)
+            .keyboardShortcut("s")
+            .help(EqtuneStore.isBuiltIn(preset.name)
+                  ? "“\(store.displayName(preset.name))” is built in: save these changes as a new preset (⌘S)"
+                  : "Save these changes to “\(store.displayName(preset.name))” (⌘S)")
+            Button(action: saveAs) { toolbarTitle("Save As…") }
             .keyboardShortcut("s", modifiers: [.command, .shift])
             .help("Save this tuning as a new preset (⇧⌘S)")
             EqtuneToggle(isOn: status.isOn, change: { await toggle($0) }) { on in
@@ -276,6 +273,11 @@ private struct PresetEditor: View {
     /// A text button's title, with room on both sides inside its toolbar glass.
     private func toolbarTitle(_ title: String) -> some View {
         Text(title).padding(.horizontal, 6)
+    }
+
+    private func saveAs() {
+        endTyping() // before the prompt takes the keyboard
+        Task { await Dialogs.askName(.saveAs(preset.name, store: store, first: sendEdits), store: store) }
     }
 
     private func toggle(_ on: Bool) async {

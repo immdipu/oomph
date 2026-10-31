@@ -33,6 +33,12 @@ All notable changes to Oomph are documented here. The format follows
 - **Reset**: put a preset back to its original state from the equalizer, the menu bar or its
   right-click menu: a Sound Library or eqtune preset to the tuning it shipped with, one of
   your own to how you last saved it.
+- **Built-in presets stay as they shipped.** Saving changes to one of eqtune's or the Sound
+  Library's presets asks for a name and saves them as a new preset, “My Bass Boost”, which keeps
+  its icon and says which built-in it came from. Saving everything at once (when turning the
+  EQ off, or before renaming or deleting) does the same, and says so.
+- **Preset names in your own words**, like “Movie Night”: eqtune gets a name made from them,
+  and Oomph shows yours. Imported headphone corrections keep their model's name.
 - **Preset management**: new, duplicate, rename, delete, export, import, and reset eqtune's
   shipped presets.
 - Save all or discard all unsaved edits before preset changes eqtune would otherwise refuse.
@@ -46,6 +52,9 @@ All notable changes to Oomph are documented here. The format follows
 ### Changed
 
 - The Xcode project, folders and scheme are now named Oomph (previously EQTuneBar).
+- eqtune's own presets show as Bright, Mellow and Pro.
+- Naming a preset uses one dialog everywhere, which says what's wrong with a name (one that's
+  taken, say) and asks again, instead of only dimming its button.
 - Turning the EQ off with unsaved edits now offers Save, Discard or Cancel.
 - The app uses the icon's coral as its accent color.
 - The equalizer animates its changes: switching presets morphs the curve into the new one,
