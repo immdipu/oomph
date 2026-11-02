@@ -78,6 +78,7 @@ final class EqtuneStore {
     private var history: [String: History] = [:]
 
     private static let devicePresetsKey = "devicePresets"
+    private static let idlePauseOffKey = "idlePauseTurnedOff"
 
     init(client: any EqtuneClient, defaults: UserDefaults = .standard) {
         self.client = client
@@ -262,6 +263,19 @@ final class EqtuneStore {
     func setAutoOffLowPower(_ on: Bool) async { await perform(["lowpower", on ? "on" : "off"]) }
     func setAutoOffIdle(_ on: Bool) async { await perform(["idle", on ? "on" : "off"]) }
 
+    /// eqtune's idle pause stops the engine after 2 minutes of silence and starts it again only
+    /// once an app is already playing, holding that app's sound back until the EQ is ready, so
+    /// the first moment after a break is silent and a short sound can be cut. Oomph turns the
+    /// pause off once; Settings › Engine can turn it back on.
+    func turnOffIdlePauseOnce() async {
+        guard !defaults.bool(forKey: Self.idlePauseOffKey), let status else { return }
+        if status.autoOffIdle {
+            await setAutoOffIdle(false)
+            guard failure == nil else { return } // try again at the next launch
+        }
+        defaults.set(true, forKey: Self.idlePauseOffKey)
+    }
+
     /// Picks a preset from Oomph's library: switches to it if it's already in eqtune,
     /// otherwise imports it first.
     func useLibraryPreset(_ item: LibraryPreset) async {
@@ -389,16 +403,8 @@ final class EqtuneStore {
         if let error { failure = Failure(error) }
     }
 
-    /// Drops every unsaved edit. eqtune discards only through `off`'s own question, so
-    /// answer it with "d", then turn the EQ back on if it was on.
-    func discardAll() async {
-        let error = await mutate {
-            let wasOn = self.status?.isOn == true // in the lane: after earlier commands and a fresh read
-            _ = try await self.client.run(["off"], input: "d\n")
-            if wasOn { _ = try await self.client.run(["on"]) }
-        }
-        if let error { failure = Failure(error) }
-    }
+    /// Drops every unsaved edit while the EQ keeps playing.
+    func discardAll() async { await perform(["discard"]) }
 
     // MARK: - Managing presets (eqtune requires no unsaved edits for these)
 
@@ -561,6 +567,7 @@ final class EqtuneStore {
         } else if let status, !status.isOn {
             failure = Failure(message: "The engine is installed, but the EQ didn't turn on. Try the switch in the menu.")
         }
+        await turnOffIdlePauseOnce()
     }
 
     /// Restarts a daemon that stopped answering: `install` rewrites its LaunchAgent and

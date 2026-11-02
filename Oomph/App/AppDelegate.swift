@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             await store.syncInstalledEngine()
             // One read so the menu bar icon is right; polling waits until the menu opens.
             await store.refresh()
+            await store.turnOffIdlePauseOnce()
             if store.blocker == .notInstalled { showOnboarding() }
         }
     }

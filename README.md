@@ -157,7 +157,9 @@ everything on screen is what eqtune reports back, so the UI can't drift from the
   [Docs/cli-samples.md](Docs/cli-samples.md).
 
 The **Build eqtune engine** phase (`Scripts/build-eqtune.sh`) runs `cargo build --release
---locked` on the `Vendor/eqtune` submodule (pinned to v0.7.1), copies the binary to
+--locked` on the `Vendor/eqtune` submodule (pinned to Oomph's fork,
+[immdipu/eqtune](https://github.com/immdipu/eqtune): v0.7.1 with a 2-minute idle pause
+instead of 10 seconds, and nothing playing untuned while the engine starts), copies the binary to
 `Oomph.app/Contents/Helpers/eqtune`, signs it with the app's identity (Hardened Runtime) and
 copies eqtune's licenses to `Contents/Resources/Licenses`. On every launch Oomph compares the
 installed engine's version with the bundled one and reinstalls it if they differ (for example
@@ -200,7 +202,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and how to propose change
 output macOS is using, so AirPods, Bluetooth speakers and the headphone jack switch as usual.
 
 **What does it cost in battery?** Real-time processing always uses some power. By default the
-engine pauses while nothing is playing and in Low Power Mode (Settings › Engine).
+engine pauses in Low Power Mode. It can also pause after 2 minutes of silence (Settings ›
+Engine), but then the first moment of audio after each pause is silent while the EQ starts, so
+Oomph leaves that off.
 
 **Why does macOS ask for audio-capture permission again?** `eqtune install` signs the daemon
 ad hoc, so each new engine version looks like a new app to macOS. That happens only after an
@@ -217,8 +221,6 @@ eqtune. Uninstalling the engine (Settings › Engine) keeps them.
 - **eqtune's text output is not a stable API.** Oomph parses `status`, `presets`,
   `preset-show` and `preset-export` as eqtune 0.7.x prints them. If a future eqtune changes the
   format, Oomph shows "couldn't read eqtune's output" with the raw text instead of guessing.
-- **Discarding edits restarts the engine for a moment.** eqtune discards unsaved edits only
-  through `eqtune off`'s own prompt, so Oomph answers it and turns the EQ back on.
 - **Some preset changes need saved edits.** eqtune refuses to import, duplicate, rename, delete
   or reset presets while any preset has unsaved edits; Oomph asks you to save or discard first.
 - **Presets follow outputs only while Oomph runs.** Turn on Launch at Login in Settings.
