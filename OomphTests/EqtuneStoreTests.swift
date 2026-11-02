@@ -296,6 +296,16 @@ struct EqtuneStoreTests {
         await store.outputChanged(to: "Speakers-UID")
         #expect(await edits(client).isEmpty)
     }
+
+    /// The idle pause plays the start of the next song without the EQ, so Oomph turns it off,
+    /// but only once: a user who turns it back on keeps it.
+    @Test func idlePauseIsTurnedOffOnce() async throws {
+        let (store, client) = await editorStore()
+        defer { store.setVisible(.editor, false) }
+        await store.turnOffIdlePauseOnce()
+        await store.turnOffIdlePauseOnce()
+        #expect(await edits(client) == [["idle", "off"]])
+    }
 }
 
 struct ToneAndHeadroomTests {

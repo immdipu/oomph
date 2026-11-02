@@ -78,6 +78,7 @@ final class EqtuneStore {
     private var history: [String: History] = [:]
 
     private static let devicePresetsKey = "devicePresets"
+    private static let idlePauseOffKey = "idlePauseTurnedOff"
 
     init(client: any EqtuneClient, defaults: UserDefaults = .standard) {
         self.client = client
@@ -261,6 +262,19 @@ final class EqtuneStore {
     func setLimiter(_ on: Bool) async { await perform(["limiter", on ? "on" : "off"]) }
     func setAutoOffLowPower(_ on: Bool) async { await perform(["lowpower", on ? "on" : "off"]) }
     func setAutoOffIdle(_ on: Bool) async { await perform(["idle", on ? "on" : "off"]) }
+
+    /// eqtune's idle pause stops the engine after 2 minutes of silence and starts it again only
+    /// once an app is already playing, so the first second or two after a break plays without
+    /// the EQ, often much louder than the tuned sound. Oomph turns the pause off once;
+    /// Settings › Engine can turn it back on.
+    func turnOffIdlePauseOnce() async {
+        guard !defaults.bool(forKey: Self.idlePauseOffKey), let status else { return }
+        if status.autoOffIdle {
+            await setAutoOffIdle(false)
+            guard failure == nil else { return } // try again at the next launch
+        }
+        defaults.set(true, forKey: Self.idlePauseOffKey)
+    }
 
     /// Picks a preset from Oomph's library: switches to it if it's already in eqtune,
     /// otherwise imports it first.
@@ -561,6 +575,7 @@ final class EqtuneStore {
         } else if let status, !status.isOn {
             failure = Failure(message: "The engine is installed, but the EQ didn't turn on. Try the switch in the menu.")
         }
+        await turnOffIdlePauseOnce()
     }
 
     /// Restarts a daemon that stopped answering: `install` rewrites its LaunchAgent and

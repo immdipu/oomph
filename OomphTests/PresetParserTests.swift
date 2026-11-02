@@ -49,7 +49,7 @@ struct PresetParserTests {
     /// check compares this version with the installed daemon's.
     @Test func bundledEngineIsInTheAppWithItsVersion() {
         #expect(EqtuneBinary.resolve() == EqtuneBinary.bundled)
-        #expect(EqtuneBinary.version(of: EqtuneBinary.bundled) == "0.7.1")
+        #expect(EqtuneBinary.version(of: EqtuneBinary.bundled) == "0.7.1-oomph.1")
     }
 
     /// `preset-export` keeps full precision, which `preset-show` rounds away.

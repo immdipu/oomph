@@ -219,7 +219,7 @@ private struct EngineSettings: View {
                 Section("Battery") {
                     EqtuneToggle(isOn: status.autoOffIdle, change: { await store.setAutoOffIdle($0) }) { _ in
                         Text("Pause when nothing is playing")
-                        Text("The EQ resumes as soon as audio starts.")
+                        Text("Saves battery after 2 minutes of silence, but the first second or two of audio after a pause plays without the EQ, often louder.")
                     }
                     EqtuneToggle(isOn: status.autoOffLowPower, change: { await store.setAutoOffLowPower($0) }) { _ in
                         Text("Pause in Low Power Mode")

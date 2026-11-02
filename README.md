@@ -157,7 +157,9 @@ everything on screen is what eqtune reports back, so the UI can't drift from the
   [Docs/cli-samples.md](Docs/cli-samples.md).
 
 The **Build eqtune engine** phase (`Scripts/build-eqtune.sh`) runs `cargo build --release
---locked` on the `Vendor/eqtune` submodule (pinned to v0.7.1), copies the binary to
+--locked` on the `Vendor/eqtune` submodule (pinned to Oomph's fork,
+[immdipu/eqtune](https://github.com/immdipu/eqtune): v0.7.1 with a 2-minute idle pause
+instead of 10 seconds), copies the binary to
 `Oomph.app/Contents/Helpers/eqtune`, signs it with the app's identity (Hardened Runtime) and
 copies eqtune's licenses to `Contents/Resources/Licenses`. On every launch Oomph compares the
 installed engine's version with the bundled one and reinstalls it if they differ (for example
@@ -200,7 +202,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and how to propose change
 output macOS is using, so AirPods, Bluetooth speakers and the headphone jack switch as usual.
 
 **What does it cost in battery?** Real-time processing always uses some power. By default the
-engine pauses while nothing is playing and in Low Power Mode (Settings › Engine).
+engine pauses in Low Power Mode. It can also pause after 2 minutes of silence (Settings ›
+Engine), but then the first second or two of audio after each pause plays without the EQ, so
+Oomph leaves that off.
 
 **Why does macOS ask for audio-capture permission again?** `eqtune install` signs the daemon
 ad hoc, so each new engine version looks like a new app to macOS. That happens only after an
