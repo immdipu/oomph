@@ -221,8 +221,6 @@ eqtune. Uninstalling the engine (Settings › Engine) keeps them.
 - **eqtune's text output is not a stable API.** Oomph parses `status`, `presets`,
   `preset-show` and `preset-export` as eqtune 0.7.x prints them. If a future eqtune changes the
   format, Oomph shows "couldn't read eqtune's output" with the raw text instead of guessing.
-- **Discarding edits restarts the engine for a moment.** eqtune discards unsaved edits only
-  through `eqtune off`'s own prompt, so Oomph answers it and turns the EQ back on.
 - **Some preset changes need saved edits.** eqtune refuses to import, duplicate, rename, delete
   or reset presets while any preset has unsaved edits; Oomph asks you to save or discard first.
 - **Presets follow outputs only while Oomph runs.** Turn on Launch at Login in Settings.

@@ -191,13 +191,12 @@ struct EqtuneStoreTests {
         ])
     }
 
-    /// eqtune discards only through `off`'s prompt, so the EQ comes back on afterwards.
-    @Test func discardAllAnswersOffAndTurnsBackOn() async {
+    /// Turning the EQ off to discard would play the music untuned, often louder, until it's back on.
+    @Test func discardAllKeepsTheEQOn() async {
         let (store, client) = await editorStore()
         defer { store.setVisible(.editor, false) }
         await store.discardAll()
-        #expect(await edits(client) == [["off"], ["on"]])
-        #expect(await client.inputs[client.calls.firstIndex(of: ["off"])!] == "d\n")
+        #expect(await edits(client) == [["discard"]])
     }
 
     @Test func importsGoThroughATemporaryFile() async throws {

@@ -403,16 +403,8 @@ final class EqtuneStore {
         if let error { failure = Failure(error) }
     }
 
-    /// Drops every unsaved edit. eqtune discards only through `off`'s own question, so
-    /// answer it with "d", then turn the EQ back on if it was on.
-    func discardAll() async {
-        let error = await mutate {
-            let wasOn = self.status?.isOn == true // in the lane: after earlier commands and a fresh read
-            _ = try await self.client.run(["off"], input: "d\n")
-            if wasOn { _ = try await self.client.run(["on"]) }
-        }
-        if let error { failure = Failure(error) }
-    }
+    /// Drops every unsaved edit while the EQ keeps playing.
+    func discardAll() async { await perform(["discard"]) }
 
     // MARK: - Managing presets (eqtune requires no unsaved edits for these)
 
