@@ -61,6 +61,10 @@ All notable changes to Oomph are documented here. The format follows
   EQ, often much louder. eqtune's pause after 10 seconds of silence caused it, so Oomph turns
   that pause off once; Settings › Engine can turn it back on, now with a warning. The engine
   now comes from Oomph's fork of eqtune, which waits 2 minutes before pausing.
+- Plugging in or unplugging headphones, or picking another output, no longer plays a moment
+  without the EQ, often louder: the engine mutes the output for that moment, until the EQ
+  plays there. Waking after the 2-minute pause, when it's on, starts with a brief silence
+  instead of untuned sound. An output you muted stays muted.
 - Discarding unsaved changes keeps the EQ playing. It used to turn the EQ off and on, so the
   music played untuned, often louder, for a second or two.
 - The sidebar no longer jumps back to the previous preset while eqtune switches, and quick

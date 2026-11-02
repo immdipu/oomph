@@ -264,9 +264,9 @@ final class EqtuneStore {
     func setAutoOffIdle(_ on: Bool) async { await perform(["idle", on ? "on" : "off"]) }
 
     /// eqtune's idle pause stops the engine after 2 minutes of silence and starts it again only
-    /// once an app is already playing, so the first second or two after a break plays without
-    /// the EQ, often much louder than the tuned sound. Oomph turns the pause off once;
-    /// Settings › Engine can turn it back on.
+    /// once an app is already playing, holding that app's sound back until the EQ is ready, so
+    /// the first moment after a break is silent and a short sound can be cut. Oomph turns the
+    /// pause off once; Settings › Engine can turn it back on.
     func turnOffIdlePauseOnce() async {
         guard !defaults.bool(forKey: Self.idlePauseOffKey), let status else { return }
         if status.autoOffIdle {
